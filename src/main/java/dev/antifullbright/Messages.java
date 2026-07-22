@@ -81,6 +81,7 @@ final class Messages {
             case "spectator" -> japanese() ? "スペクテイターモード" : "spectator mode";
             case "above_maximum_y" -> japanese() ? "maximumY より上" : "above maximumY";
             case "night_vision" -> japanese() ? "暗視効果" : "night vision effect";
+            case "underwater" -> japanese() ? "目の位置が水中" : "eye position is underwater";
             case "operator" -> japanese() ? "サーバーOP" : "server operator";
             case "eye_chunk_unloaded" -> japanese() ? "目の位置のチャンクが未ロード" : "eye-position chunk is not loaded";
             case "eye_not_dark" -> japanese() ? "目の位置が設定された暗さではない" : "eye position is not at configured darkness";

@@ -36,6 +36,8 @@ public final class AntiFullbrightConfig {
             "Exclude server operators from detection.");
     public static final ModConfigSpec.BooleanValue EXCLUDE_NIGHT_VISION = bool("excludeNightVision", true,
             "Exclude players with the vanilla night vision effect.");
+    public static final ModConfigSpec.BooleanValue EXCLUDE_UNDERWATER = bool("excludeUnderwater", true,
+            "Exclude players whose eye position is submerged in water.");
     public static final ModConfigSpec.IntValue NOTIFY_OPERATORS_AT_WARNING = integer("notifyOperatorsAtWarning", 2, 1, 100,
             "First warning level that is reported to online operators.");
     public static final ModConfigSpec.BooleanValue PERSIST_WARNINGS = bool("persistWarnings", true,
@@ -84,6 +86,7 @@ public final class AntiFullbrightConfig {
             changed += setInt(disk, "warningDecayMinutes", WARNING_DECAY_MINUTES, 1, 43_200);
             changed += setBool(disk, "excludeOperators", EXCLUDE_OPERATORS);
             changed += setBool(disk, "excludeNightVision", EXCLUDE_NIGHT_VISION);
+            changed += setBool(disk, "excludeUnderwater", EXCLUDE_UNDERWATER);
             changed += setInt(disk, "notifyOperatorsAtWarning", NOTIFY_OPERATORS_AT_WARNING, 1, 100);
             changed += setBool(disk, "persistWarnings", PERSIST_WARNINGS);
             changed += setBool(disk, "enableDedicatedLog", ENABLE_DEDICATED_LOG);

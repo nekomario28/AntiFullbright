@@ -14,6 +14,7 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.common.NeoForgeMod;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
 import java.time.Instant;
@@ -287,6 +288,10 @@ final class DarkMiningManager {
         if (player.blockPosition().getY() > AntiFullbrightConfig.MAXIMUM_Y.getAsInt()) return Optional.of("above_maximum_y");
         if (AntiFullbrightConfig.EXCLUDE_NIGHT_VISION.getAsBoolean() && player.hasEffect(MobEffects.NIGHT_VISION)) {
             return Optional.of("night_vision");
+        }
+        if (AntiFullbrightConfig.EXCLUDE_UNDERWATER.getAsBoolean()
+                && player.isEyeInFluidType(NeoForgeMod.WATER_TYPE.value())) {
+            return Optional.of("underwater");
         }
         if (AntiFullbrightConfig.EXCLUDE_OPERATORS.getAsBoolean() && player.hasPermissions(2)) {
             return Optional.of("operator");

@@ -47,6 +47,7 @@ Java 21 を使用します。
 - `warningDecayMinutes`
 - `excludeOperators`
 - `excludeNightVision`
+- `excludeUnderwater`（目の位置が水中のプレイヤーを除外。既定値 `true`）
 - `notifyOperatorsAtWarning`（OP 通知を開始する警告レベル。既定値 2）
 - `persistWarnings`
 - `enableDedicatedLog`

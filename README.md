@@ -47,6 +47,7 @@ All settings can be changed in `config/antifullbright-server.toml` after the fir
 - `warningDecayMinutes`
 - `excludeOperators`
 - `excludeNightVision`
+- `excludeUnderwater` (excludes players whose eye position is underwater; default `true`)
 - `notifyOperatorsAtWarning` (the first warning level reported to operators; default 2)
 - `persistWarnings`
 - `enableDedicatedLog`
