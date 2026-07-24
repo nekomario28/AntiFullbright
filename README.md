@@ -2,9 +2,13 @@
 
 [日本語ドキュメント](README_JA.md)
 
-Anti Fullbright is a server-only mod for Minecraft 1.21.1 and NeoForge 21.1.235. It does not claim to identify Fullbright directly. Instead, it progressively warns players who mine for an extended period in complete darkness.
+Anti Fullbright is a Minecraft 1.21.1 / NeoForge 21.1.235 mod.
 
-The Mod ID is `antifullbright`. The Java source, tag namespace, configuration filename, logging thread, and build artifact all use this ID.
+- On servers, it does not claim to identify Fullbright directly. It progressively warns players who mine for an extended period in complete darkness.
+- When installed on a client, it scans the local `mods` and `resourcepacks` directories during startup and fails client loading when configured Fullbright signatures are found.
+- After startup, it recursively watches `resourcepacks` and performs a full rescan after create, modify, or delete events.
+
+The Mod ID is `antifullbright`. Version 1.1.0 adds the client content scanner.
 
 ## Building and installation
 
@@ -14,27 +18,99 @@ Use Java 21.
 ./gradlew build
 ```
 
-Copy `build/libs/antifullbright-1.0.0.jar` into the `mods` directory of a NeoForge 1.21.1 server. No client-side installation or custom network payload is required.
+The artifact is `build/libs/antifullbright-1.1.0.jar`.
 
-## Detection behavior
+- For server-side dark-mining detection only, install it in the server `mods` directory.
+- Players who must use local mod and resource-pack scanning also install the same JAR in the client `mods` directory.
+
+The scanner runs locally. This version does not yet implement a cryptographic server handshake that proves the scanner is installed or that a reported scan result is genuine.
+
+## Client scanner
+
+When enabled, client startup scans the following content.
+
+### Mods
+
+The scanner inspects `.jar` and `.zip` files directly inside `mods`:
+
+- file names
+- archive paths
+- `META-INF/neoforge.mods.toml`
+- `META-INF/mods.toml`
+- `fabric.mod.json`
+- `quilt.mod.json`
+- configured SHA-256 hashes
+
+The running AntiFullbright archive is excluded only by its actual code-source absolute path, not by trusting a claimed Mod ID.
+
+### Resource packs
+
+ZIP packs and unpacked directories directly inside `resourcepacks` are checked using:
+
+- pack names
+- `pack.mcmeta`
+- archive or directory paths
+- configured SHA-256 hashes
+
+The default prohibited lightmap signatures are:
+
+```text
+assets/minecraft/optifine/lightmap/
+assets/minecraft/mcpatcher/lightmap/
+assets/minecraft/shaders/core/lightmap
+```
+
+A violation—or unreadable content while `failClosed = true`—throws during client setup and fails mod loading.
+
+### Change monitoring
+
+After a clean startup scan, `watchResourcePacks = true` recursively monitors `resourcepacks` with Java `WatchService`.
+
+- create, modify, and delete events are observed
+- newly created subdirectories are registered
+- bursts are coalesced using `watchDebounceMillis`
+- a full resource-pack rescan follows changes, including `OVERFLOW`
+- runtime detection exits the client with code `23` by default
+
+## Client configuration
+
+Settings are generated in `config/antifullbright-client.toml`:
+
+- `enabled`
+- `scanMods`
+- `scanResourcePacks`
+- `watchResourcePacks`
+- `failClosed`
+- `exitOnRuntimeDetection`
+- `watchDebounceMillis`
+- `maximumArchiveEntries`
+- `maximumTextBytes`
+- `blockedModTokens`
+- `blockedResourcePackTokens`
+- `blockedResourcePackPaths`
+- `blockedModSha256`
+- `blockedResourcePackSha256`
+
+Tokens and hashes are comma-separated. Text matching is case-insensitive. Hashes are 64 hexadecimal SHA-256 values with an optional `sha256:` prefix.
+
+## Server-side dark-mining detection
 
 - Only natural mining blocks broken by a real player through `BlockEvent.BreakEvent` are recorded.
-- Fake players, creative players, spectators, and—by default—operators and players with Night Vision are excluded.
+- Fake players, creative players, spectators, and—by default—operators, players with Night Vision, and underwater players are excluded.
 - Both the player's eye position and the broken block must match the configured block-light and sky-light values.
 - The mod never loads a chunk to obtain light values.
-- By default, a warning requires both 60 seconds of continuous mining and 20 counted blocks. The session resets after each warning.
-- A session resets after 10 seconds without a qualifying break, movement into light, death, logout, dimension change, teleportation, or placement of a light-emitting block.
-- Holding a tagged light source grants only a 20-second grace period at the beginning of a session. Mining counts normally after that period even if the item is still held.
-- Create machines and Deployers are excluded because they do not produce a real-player break event or operate through a FakePlayer. A real player using tools from another mod is checked normally.
-- Recently player-placed blocks are excluded when broken again. These records have an expiration time, a per-player limit, and are removed on chunk unload.
+- By default, a warning requires both 60 seconds of continuous mining and 20 counted blocks.
+- Sessions reset on inactivity, light exposure, death, logout, dimension changes, teleportation, or light-emitting block placement.
+- Create machines and Deployers are excluded when they do not produce a real-player break event or operate through a FakePlayer.
+- Recently player-placed blocks are excluded using expiring, per-player bounded records.
 
 Only players with active state are checked every 20 ticks. The mod performs no surrounding-area scans and never force-loads chunks.
 
-## Configuration
+## Server configuration
 
-All settings can be changed in `config/antifullbright-server.toml` after the first server start.
+Settings are generated in `config/antifullbright-server.toml`:
 
-- `language` (`ja_jp` or `en_us`; default `en_us`)
+- `language`
 - `enabled`
 - `maximumY`
 - `requiredBlockLight`
@@ -47,41 +123,20 @@ All settings can be changed in `config/antifullbright-server.toml` after the fir
 - `warningDecayMinutes`
 - `excludeOperators`
 - `excludeNightVision`
-- `excludeUnderwater` (excludes players whose eye position is underwater; default `true`)
-- `notifyOperatorsAtWarning` (the first warning level reported to operators; default 2)
+- `excludeUnderwater`
+- `notifyOperatorsAtWarning`
 - `persistWarnings`
 - `enableDedicatedLog`
 - `placedBlockTrackingEnabled`
 - `placedBlockTrackingExpirationMinutes`
 - `placedBlockTrackingMaximumEntriesPerPlayer`
 
-`/darkmining reload` synchronously reloads this file. Numeric values are constrained to their declared safe ranges.
-
-### Display language
-
-The `language` setting controls player warnings, disconnect reasons, operator notifications, and administrator command output.
-
-```toml
-# English
-language = "en_us"
-
-# Japanese
-language = "ja_jp"
-```
-
-Run `/darkmining reload` after changing it. The server sends fully rendered text, so no language resources or mod installation are needed on clients. This is one server-wide language setting; it does not automatically follow each client's language preference.
+`/darkmining reload` synchronously reloads the server configuration and constrains values to their declared ranges.
 
 ## Data-pack tags
 
 - Light-source items: `antifullbright:dark_mining_light_sources`
 - Counted mining blocks: `antifullbright:dark_mining_counted_blocks`
-
-The built-in tags are located at:
-
-- `data/antifullbright/tags/item/dark_mining_light_sources.json`
-- `data/antifullbright/tags/block/dark_mining_counted_blocks.json`
-
-A data pack can add values through tags with the same IDs. NeoForge's `remove` array can remove built-in entries. For elements from another mod, the recommended syntax is `{ "id": "othermod:item", "required": false }`.
 
 ## Administrator commands
 
@@ -95,10 +150,17 @@ All commands require permission level 2 or higher.
 /darkmining debug <player>
 ```
 
-`reset` clears the warning state and current session. `debug` displays Y position, eye and feet light levels, session duration, counted blocks, remaining light-holding grace, warning state, and the current exclusion reason.
-
 ## Persistence and evidence logs
 
-Warning levels and last-warning timestamps are stored by UUID in Overworld SavedData (`antifullbright_warnings.dat`). By default, the effective level decreases by one for every 30 minutes without a new warning when the state is next read or updated.
+Warning levels and timestamps are stored by UUID in Overworld SavedData (`antifullbright_warnings.dat`). Warning and kick evidence is written to the normal logger and `logs/dark-mining-detections.jsonl`.
 
-Warning and kick evidence is written to the normal server logger and asynchronously appended as one JSON object per line to `logs/dark-mining-detections.jsonl`. World and entity values are captured into an immutable record on the server thread before a dedicated single writer thread performs file I/O.
+## Security limitations
+
+This is an ordinary NeoForge client mod, not a tamper-proof anti-cheat.
+
+- A player can remove or modify the scanner itself.
+- A custom implementation may evade name, metadata, path, and known-hash signatures.
+- A normal server mod cannot fully trust information controlled by the client.
+- Strict deployments should combine a controlled launcher, signed manifests, and the existing server-side behavioral detector.
+
+The dark-mining detector remains enabled as a defense-in-depth signal when client scanning is bypassed.
