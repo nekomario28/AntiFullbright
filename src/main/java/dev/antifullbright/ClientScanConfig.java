@@ -1,0 +1,94 @@
+package dev.antifullbright;
+
+import dev.antifullbright.client.ContentScanner;
+import net.neoforged.neoforge.common.ModConfigSpec;
+
+import java.util.Arrays;
+import java.util.LinkedHashSet;
+import java.util.Locale;
+import java.util.Set;
+
+/** Client-local policy for startup and resource-pack scans. */
+public final class ClientScanConfig {
+    private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
+
+    public static final ModConfigSpec.BooleanValue ENABLED = bool("enabled", true,
+            "Enable client-side mod and resource-pack scanning.");
+    public static final ModConfigSpec.BooleanValue SCAN_MODS = bool("scanMods", true,
+            "Scan JAR/ZIP files in the local mods directory during startup.");
+    public static final ModConfigSpec.BooleanValue SCAN_RESOURCE_PACKS = bool("scanResourcePacks", true,
+            "Scan ZIP and unpacked resource packs during startup.");
+    public static final ModConfigSpec.BooleanValue WATCH_RESOURCE_PACKS = bool("watchResourcePacks", true,
+            "Watch the resourcepacks directory recursively and rescan after changes.");
+    public static final ModConfigSpec.BooleanValue FAIL_CLOSED = bool("failClosed", true,
+            "Treat unreadable or malformed archives as blocked content.");
+    public static final ModConfigSpec.BooleanValue EXIT_ON_RUNTIME_DETECTION = bool("exitOnRuntimeDetection", true,
+            "Exit the client when a resource-pack rescan finds blocked content.");
+    public static final ModConfigSpec.IntValue WATCH_DEBOUNCE_MILLIS = integer(
+            "watchDebounceMillis", 1000, 100, 30_000,
+            "Wait this long after the final filesystem event before rescanning.");
+    public static final ModConfigSpec.IntValue MAXIMUM_ARCHIVE_ENTRIES = integer(
+            "maximumArchiveEntries", 100_000, 100, 1_000_000,
+            "Maximum entries inspected in one archive or unpacked resource pack.");
+    public static final ModConfigSpec.IntValue MAXIMUM_TEXT_BYTES = integer(
+            "maximumTextBytes", 1_048_576, 1024, 16_777_216,
+            "Maximum bytes read from one metadata text file.");
+
+    public static final ModConfigSpec.ConfigValue<String> BLOCKED_MOD_TOKENS = string(
+            "blockedModTokens",
+            "fullbright,full_bright,full-bright,gammautils,gamma-utils,boostedbrightness,boosted-brightness",
+            "Comma-separated, case-insensitive tokens matched against mod filenames, metadata, and archive paths.");
+    public static final ModConfigSpec.ConfigValue<String> BLOCKED_RESOURCE_PACK_TOKENS = string(
+            "blockedResourcePackTokens",
+            "fullbright,full_bright,full-bright,nightvision,night-vision",
+            "Comma-separated, case-insensitive tokens matched against resource-pack names and pack.mcmeta.");
+    public static final ModConfigSpec.ConfigValue<String> BLOCKED_RESOURCE_PACK_PATHS = string(
+            "blockedResourcePackPaths",
+            "assets/minecraft/optifine/lightmap/,assets/minecraft/mcpatcher/lightmap/,assets/minecraft/shaders/core/lightmap",
+            "Comma-separated path fragments that identify prohibited lightmap overrides.");
+    public static final ModConfigSpec.ConfigValue<String> BLOCKED_MOD_SHA256 = string(
+            "blockedModSha256", "",
+            "Comma-separated SHA-256 hashes for prohibited mod archives. Optional sha256: prefixes are accepted.");
+    public static final ModConfigSpec.ConfigValue<String> BLOCKED_RESOURCE_PACK_SHA256 = string(
+            "blockedResourcePackSha256", "",
+            "Comma-separated SHA-256 hashes for prohibited ZIP or unpacked resource packs.");
+
+    public static final ModConfigSpec SPEC = BUILDER.build();
+
+    private ClientScanConfig() {}
+
+    public static ContentScanner.Policy policy() {
+        return new ContentScanner.Policy(
+                csv(BLOCKED_MOD_TOKENS.get()),
+                csv(BLOCKED_RESOURCE_PACK_TOKENS.get()),
+                csv(BLOCKED_RESOURCE_PACK_PATHS.get()),
+                csv(BLOCKED_MOD_SHA256.get()),
+                csv(BLOCKED_RESOURCE_PACK_SHA256.get()),
+                MAXIMUM_ARCHIVE_ENTRIES.getAsInt(),
+                MAXIMUM_TEXT_BYTES.getAsInt(),
+                FAIL_CLOSED.getAsBoolean()
+        );
+    }
+
+    private static ModConfigSpec.BooleanValue bool(String name, boolean defaultValue, String comment) {
+        return BUILDER.comment(comment).define(name, defaultValue);
+    }
+
+    private static ModConfigSpec.IntValue integer(String name, int defaultValue, int min, int max, String comment) {
+        return BUILDER.comment(comment).defineInRange(name, defaultValue, min, max);
+    }
+
+    private static ModConfigSpec.ConfigValue<String> string(String name, String defaultValue, String comment) {
+        return BUILDER.comment(comment).define(name, defaultValue, value -> value instanceof String);
+    }
+
+    private static Set<String> csv(String value) {
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+        Arrays.stream(value.split(","))
+                .map(String::trim)
+                .map(token -> token.toLowerCase(Locale.ROOT))
+                .filter(token -> !token.isEmpty())
+                .forEach(values::add);
+        return Set.copyOf(values);
+    }
+}
