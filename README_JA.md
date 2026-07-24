@@ -2,9 +2,13 @@
 
 [English documentation](README.md)
 
-Minecraft 1.21.1 / NeoForge 21.1.235 向けのサーバー専用 Mod です。Fullbright の使用を断定せず、プレイヤー本人による「完全な暗所での長時間採掘」を段階的に警告します。
+Minecraft 1.21.1 / NeoForge 21.1.235 向けの Mod です。
 
-Mod ID は `antifullbright` です。ソース、タグ namespace、設定ファイル名、ログ用スレッド名、ビルド成果物名まで同じ ID に統一しています。
+- サーバーでは、Fullbright の使用を断定せず、プレイヤー本人による「完全な暗所での長時間採掘」を段階的に警告します。
+- クライアントへ導入した場合は、起動時にローカルの `mods` と `resourcepacks` を検査し、設定された Fullbright シグネチャを検出すると起動を失敗させます。
+- 起動後は `resourcepacks` 以下を再帰監視し、作成・変更・削除後にフォルダ全体を再検査します。
+
+Mod ID は `antifullbright` です。バージョン 1.1.0 からクライアントスキャナーが追加されています。
 
 ## ビルドと導入
 
@@ -14,25 +18,98 @@ Java 21 を使用します。
 ./gradlew build
 ```
 
-生成された `build/libs/antifullbright-1.0.0.jar` を NeoForge 1.21.1 サーバーの `mods` ディレクトリへ入れてください。クライアント側への導入や通信 payload は不要です。
+生成されるファイルは `build/libs/antifullbright-1.1.0.jar` です。
 
-## 検出動作
+- 暗所採掘のサーバー検知だけを利用する場合は、サーバーの `mods` に導入します。
+- ローカルMOD・リソースパック検査を利用するプレイヤーは、同じJARをクライアントの `mods` にも導入します。
+
+クライアントスキャナーはローカルで動作します。現段階では、サーバーがスキャナーの導入や検査結果を暗号学的に証明させる通信ハンドシェイクは実装していません。
+
+## クライアントスキャナー
+
+クライアント起動時、設定が有効なら次を検査します。
+
+### MOD
+
+`mods` 直下の `.jar` と `.zip` を対象に、次を確認します。
+
+- ファイル名
+- アーカイブ内のパス
+- `META-INF/neoforge.mods.toml`
+- `META-INF/mods.toml`
+- `fabric.mod.json`
+- `quilt.mod.json`
+- 設定された SHA-256
+
+実行中の AntiFullbright 本体は、MOD ID ではなく実際のコードソースJARの絶対パスでのみ除外します。別のMODが `antifullbright` を名乗っても自動的には除外されません。
+
+### リソースパック
+
+`resourcepacks` 直下のZIP形式と展開済みフォルダを対象に、次を確認します。
+
+- パック名
+- `pack.mcmeta`
+- アーカイブまたはフォルダ内のパス
+- 設定された SHA-256
+
+既定では次のライトマップ上書きを禁止シグネチャとして扱います。
+
+```text
+assets/minecraft/optifine/lightmap/
+assets/minecraft/mcpatcher/lightmap/
+assets/minecraft/shaders/core/lightmap
+```
+
+違反または、`failClosed = true` の状態で読めないアーカイブを検出すると、クライアントセットアップ中に例外を発生させてModロードを失敗させます。
+
+### 変更監視
+
+起動時検査を通過した後、`watchResourcePacks = true` なら Java `WatchService` で `resourcepacks` 以下を再帰監視します。
+
+- 作成・変更・削除を監視
+- 新しく作られたサブディレクトリも監視対象へ追加
+- 連続イベントを `watchDebounceMillis` でまとめる
+- `OVERFLOW` を含む変更後はパック全体を再検査
+- 違反検出時は既定で終了コード `23` によりクライアントを終了
+
+## クライアント設定
+
+初回クライアント起動後の `config/antifullbright-client.toml` で変更できます。
+
+- `enabled`
+- `scanMods`
+- `scanResourcePacks`
+- `watchResourcePacks`
+- `failClosed`
+- `exitOnRuntimeDetection`
+- `watchDebounceMillis`
+- `maximumArchiveEntries`
+- `maximumTextBytes`
+- `blockedModTokens`
+- `blockedResourcePackTokens`
+- `blockedResourcePackPaths`
+- `blockedModSha256`
+- `blockedResourcePackSha256`
+
+トークンとハッシュはカンマ区切りです。比較は英字の大文字・小文字を区別しません。ハッシュは64桁の16進SHA-256で、任意で `sha256:` を先頭につけられます。
+
+## サーバー側の暗所採掘検知
 
 - `BlockEvent.BreakEvent` のうち、実プレイヤーが対象タグの自然ブロックを破壊した場合だけを記録します。
-- FakePlayer、クリエイティブ、スペクテイター、既定では OP と暗視効果中のプレイヤーを除外します。
+- FakePlayer、クリエイティブ、スペクテイター、既定では OP、暗視効果中、水中のプレイヤーを除外します。
 - プレイヤーの目と破壊位置の両方で、ブロック光・天空光が設定値と一致する必要があります。
 - 未ロードチャンクの光は読みません。
-- 既定では 60 秒と 20 ブロックの両方を満たした時だけ警告します。警告後はセッションをリセットします。
-- 最後の対象ブロック破壊から 10 秒経過、明所への移動、死亡、ログアウト、ディメンション移動、テレポート、発光ブロック設置でセッションをリセットします。
-- 手に持ったタグ付き光源の猶予はセッション冒頭の 20 秒だけです。猶予後は所持していてもカウントします。
-- Create 等の機械や Deployer による破壊は、プレイヤーの BreakEvent 以外または FakePlayer として除外されます。通常プレイヤーが他 Mod の道具を使う場合は通常どおり判定します。
-- 最近プレイヤー自身が設置したブロックは、期限付き・UUID ごとの件数上限付きで記憶して再破壊を除外します。チャンクアンロード時にも該当記録を破棄します。
+- 既定では60秒と20ブロックの両方を満たした時だけ警告します。警告後はセッションをリセットします。
+- 最後の対象ブロック破壊から10秒経過、明所への移動、死亡、ログアウト、ディメンション移動、テレポート、発光ブロック設置でセッションをリセットします。
+- 手に持ったタグ付き光源の猶予はセッション冒頭の20秒だけです。
+- Create等の機械やDeployerによる破壊は、プレイヤーのBreakEvent以外またはFakePlayerとして除外されます。
+- 最近プレイヤー自身が設置したブロックは、期限付き・UUIDごとの件数上限付きで記憶して再破壊を除外します。
 
-状態確認はセッション中プレイヤーだけを 20 tick ごとに行います。周囲探索や強制チャンクロードは行いません。
+状態確認はセッション中プレイヤーだけを20 tickごとに行います。周囲探索や強制チャンクロードは行いません。
 
-## 設定
+## サーバー設定
 
-初回起動後の `config/antifullbright-server.toml` で全項目を変更できます。
+初回サーバー起動後の `config/antifullbright-server.toml` で変更できます。
 
 - `language`（`ja_jp` または `en_us`。既定値 `en_us`）
 - `enabled`
@@ -47,8 +124,8 @@ Java 21 を使用します。
 - `warningDecayMinutes`
 - `excludeOperators`
 - `excludeNightVision`
-- `excludeUnderwater`（目の位置が水中のプレイヤーを除外。既定値 `true`）
-- `notifyOperatorsAtWarning`（OP 通知を開始する警告レベル。既定値 2）
+- `excludeUnderwater`
+- `notifyOperatorsAtWarning`
 - `persistWarnings`
 - `enableDedicatedLog`
 - `placedBlockTrackingEnabled`
@@ -57,35 +134,19 @@ Java 21 を使用します。
 
 `/darkmining reload` はこのファイルを同期的に再読込します。値は定義済みの安全な範囲へ制限されます。
 
-### 表示言語
-
-警告、キック理由、OP 通知、管理コマンドの結果は `language` で切り替えます。
-
-```toml
-# English
-language = "en_us"
-
-# 日本語
-language = "ja_jp"
-```
-
-変更後に `/darkmining reload` を実行してください。この Mod はサーバーが翻訳済みの文章を送信するため、クライアント側への言語ファイルや Mod の導入は不要です。クライアント自身の言語設定による自動切り替えではなく、サーバー全体で共通の表示言語になります。
-
 ## データパック用タグ
 
 - 光源アイテム: `antifullbright:dark_mining_light_sources`
 - 採掘カウント対象: `antifullbright:dark_mining_counted_blocks`
 
-組み込みタグはそれぞれ次の場所です。
+組み込みタグは次の場所です。
 
 - `data/antifullbright/tags/item/dark_mining_light_sources.json`
 - `data/antifullbright/tags/block/dark_mining_counted_blocks.json`
 
-同じ ID のタグをデータパックから追加できます。NeoForge の `remove` 配列を使えば組み込み対象の削除もできます。他 Mod の要素は `{ "id": "othermod:item", "required": false }` の形式を推奨します。
-
 ## 管理コマンド
 
-すべて権限レベル 2 以上が必要です。
+すべて権限レベル2以上が必要です。
 
 ```text
 /darkmining status <player>
@@ -95,10 +156,17 @@ language = "ja_jp"
 /darkmining debug <player>
 ```
 
-`reset` は警告と現在セッションをリセットします。`debug` は Y、目・足元の光、セッション時間、破壊数、光源所持猶予、警告状態、現在の除外理由を表示します。
-
 ## 永続化とログ
 
-警告回数と最終警告時刻は UUID をキーに Overworld の SavedData (`antifullbright_warnings.dat`) へ保存されます。既定では新しい警告が 30 分なければ、参照時または次回警告時に経過時間分だけ段階的に減衰します。
+警告回数と最終警告時刻はUUIDをキーにOverworldのSavedData (`antifullbright_warnings.dat`) へ保存されます。警告・キックの証拠は通常ロガーと `logs/dark-mining-detections.jsonl` へ記録します。
 
-警告・キックの証拠は通常ロガーへ出し、`logs/dark-mining-detections.jsonl` に 1 イベント 1 行で非同期追記します。ワールドや Entity の値はサーバースレッドで不変レコードへ変換してから、専用の単一 writer thread でファイルへ書き込みます。
+## セキュリティ上の限界
+
+この機能は一般的なNeoForgeクライアントMODであり、改造されたクライアントに対する完全なアンチチートではありません。
+
+- プレイヤーはスキャナーMOD自体を削除・改変できます。
+- 名称・メタデータ・パス・既知ハッシュに一致しない独自実装は検出できない場合があります。
+- クライアント自身が報告する情報を、通常のサーバーMODだけで完全には信頼できません。
+- 厳格な運用には、配布物を固定する専用ランチャー、署名済みマニフェスト、サーバー側の行動検知を併用してください。
+
+既存のサーバー側暗所採掘検知は、クライアント検査が回避された場合の補助的な検出として残しています。
