@@ -18,6 +18,7 @@ runs {
         workingDirectory project.layout.projectDirectory.dir('run').dir(name)
         modSource project.sourceSets.main
     }
+    client {}
     server {
         argument '--nogui'
     }
