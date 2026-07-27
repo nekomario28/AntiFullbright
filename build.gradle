@@ -31,6 +31,7 @@ runs {
     }
     gameTestServer {
         systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        systemProperty 'antifullbright.enableGameTests', 'true'
         modSource project.sourceSets.gameTest
     }
 }
