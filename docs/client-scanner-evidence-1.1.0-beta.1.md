@@ -127,6 +127,14 @@ The current JUnit suite verifies:
 - malformed archives differ correctly between fail-open and fail-closed policies;
 - deletion and recreation of the watched resource-pack root restores nested change notifications.
 
+## Policy and privacy review
+
+The beta policy remains client-local and user-editable. It is not represented as a server-enforced policy because no handshake or attestation exists.
+
+The current implementation contains no client payload that transmits scanned contents, filenames, paths, hashes, or classification results. Findings remain in local logs and the blocking screen. Because local paths can appear in logs or crash reports, the README now instructs users to review and redact private path components before sharing evidence.
+
+The default policy keeps exact identifiers, hashes, prohibited paths, and fail-closed errors as blocking evidence. Ambiguous token matches remain warnings only. A production server's canonical blocked-ID/hash registry is still not approved and must not be inferred from the beta defaults.
+
 ## Remaining limitations and gates
 
 The following are not proven by this evidence:
@@ -146,5 +154,5 @@ Before changing the version to stable `1.1.0` or marking PR #1 ready for review:
 1. install the exact generated JAR in a normal NeoForge `21.1.235` client profile;
 2. record a clean launch and one startup-block fixture outside the development environment;
 3. add and verify the project icon if it is intended for the release;
-4. review the default policy values and privacy disclosure;
+4. approve the canonical production policy or explicitly keep the scanner user-configured;
 5. perform a final exact-head review and rerun both workflows.
