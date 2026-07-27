@@ -12,6 +12,13 @@ base {
 
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
+sourceSets {
+    gameTest {
+        java.srcDirs = ['src/gameTest/java']
+        resources.srcDirs = ['src/gameTest/resources']
+    }
+}
+
 runs {
     configureEach {
         systemProperty 'forge.logging.console.level', 'info'
@@ -22,12 +29,22 @@ runs {
     server {
         argument '--nogui'
     }
+    gameTestServer {
+        systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        modSource project.sourceSets.gameTest
+        setForceExit false
+    }
 }
 
 repositories {}
 
+configurations {
+    gameTestImplementation.extendsFrom implementation
+}
+
 dependencies {
     implementation "net.neoforged:neoforge:${neo_version}"
+    gameTestImplementation sourceSets.main.output
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
