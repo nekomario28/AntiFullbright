@@ -55,32 +55,42 @@ jobs:
           path: build/libs/antifullbright-*.jar
           if-no-files-found: error
 
-      - name: Prepare dedicated server smoke test
+      - name: Prepare runtime smoke tests
         shell: bash
         run: |
-          mkdir -p run/server
+          mkdir -p run/server run/client/resourcepacks
           printf 'eula=true\n' > run/server/eula.txt
+          printf 'online-mode=false\nserver-port=25565\n' > run/server/server.properties
+          command -v setsid
+          command -v xvfb-run
 
       - name: Run dedicated server startup gate
         shell: bash
         run: |
-          set +e
-          timeout --signal=TERM --kill-after=15s 180s \
-            ./gradlew runServer --no-daemon > dedicated-server.log 2>&1
-          status=$?
-          set -e
+          set -u
+          setsid ./gradlew runServer --no-daemon > dedicated-server.log 2>&1 &
+          process_id=$!
+          ready=0
 
-          startup_marker='Done ('
-          mod_marker='AntiFullbright dark-mining detection is ready'
+          for _ in $(seq 1 180); do
+            if grep -Fq 'Done (' dedicated-server.log 2>/dev/null \
+                && grep -Fq 'AntiFullbright dark-mining detection is ready' dedicated-server.log 2>/dev/null; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$process_id" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
 
-          if ! grep -Fq "$startup_marker" dedicated-server.log; then
-            echo "Dedicated server did not reach the Minecraft ready marker."
-            tail -n 200 dedicated-server.log
-            exit 1
-          fi
+          kill -TERM -- "-$process_id" 2>/dev/null || true
+          sleep 3
+          kill -KILL -- "-$process_id" 2>/dev/null || true
+          wait "$process_id" 2>/dev/null || true
 
-          if ! grep -Fq "$mod_marker" dedicated-server.log; then
-            echo "AntiFullbright did not reach its dedicated-server ready marker."
+          if [ "$ready" -ne 1 ]; then
+            echo "Dedicated server did not reach all readiness markers."
             tail -n 200 dedicated-server.log
             exit 1
           fi
@@ -91,15 +101,8 @@ jobs:
             exit 1
           fi
 
-          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ] && [ "$status" -ne 143 ]; then
-            echo "Dedicated server process ended with unexpected status $status."
-            tail -n 200 dedicated-server.log
-            exit "$status"
-          fi
-
-          echo "Dedicated server startup gate passed; timeout termination was expected after readiness evidence."
-          grep -F "$mod_marker" dedicated-server.log | tail -n 1
-          grep -F "$startup_marker" dedicated-server.log | tail -n 1
+          grep -F 'AntiFullbright dark-mining detection is ready' dedicated-server.log | tail -n 1
+          grep -F 'Done (' dedicated-server.log | tail -n 1
 
       - name: Upload dedicated server evidence
         if: always()
@@ -107,5 +110,62 @@ jobs:
         with:
           name: dedicated-server-smoke-log
           path: dedicated-server.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Run physical client startup gate
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          set -u
+          setsid xvfb-run -a ./gradlew runClient --no-daemon > physical-client.log 2>&1 &
+          process_id=$!
+          ready=0
+
+          for _ in $(seq 1 180); do
+            if grep -Fq 'Backend library: LWJGL version' physical-client.log 2>/dev/null \
+                && grep -Fq 'Client content scan completed' physical-client.log 2>/dev/null; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$process_id" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          kill -TERM -- "-$process_id" 2>/dev/null || true
+          sleep 3
+          kill -KILL -- "-$process_id" 2>/dev/null || true
+          wait "$process_id" 2>/dev/null || true
+
+          if [ "$ready" -ne 1 ]; then
+            echo "Physical client did not reach all readiness markers."
+            tail -n 240 physical-client.log
+            exit 1
+          fi
+
+          if grep -Eq 'NoClassDefFoundError|ClassNotFoundException|ModLoadingException|ModLoadingCrashException|Failed to create window|GLFW error' physical-client.log; then
+            echo "Physical client log contains a side, loading, or display failure."
+            tail -n 240 physical-client.log
+            exit 1
+          fi
+
+          if grep -Fq 'AntiFullbright blocked client setup' physical-client.log; then
+            echo "The clean physical-client fixture was unexpectedly blocked."
+            tail -n 240 physical-client.log
+            exit 1
+          fi
+
+          grep -F 'Backend library: LWJGL version' physical-client.log | tail -n 1
+          grep -F 'Client content scan completed' physical-client.log | tail -n 1
+
+      - name: Upload physical client evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: physical-client-smoke-log
+          path: physical-client.log
           if-no-files-found: warn
           retention-days: 14
