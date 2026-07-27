@@ -30,7 +30,12 @@ jobs:
 
       - name: Install official NeoForge and run packaged JAR
         shell: bash
-        run: bash .github/scripts/packaged-server-smoke.sh
+        run: |
+          set +e
+          bash .github/scripts/packaged-server-smoke.sh > packaged-server-run.log 2>&1
+          status=$?
+          cat packaged-server-run.log
+          exit "$status"
 
       - name: Upload packaged-server evidence
         if: always()
@@ -38,6 +43,7 @@ jobs:
         with:
           name: packaged-server-evidence
           path: |
+            packaged-server-run.log
             packaged-server-install.log
             packaged-server.log
             packaged-server-mod.sha256
