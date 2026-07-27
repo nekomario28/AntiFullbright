@@ -10,8 +10,8 @@ import java.nio.file.StandardWatchEventKinds;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
 import java.nio.file.WatchService;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
@@ -21,7 +21,7 @@ public final class ResourcePackWatcher implements AutoCloseable {
     private final long debounceMillis;
     private final Runnable rescan;
     private final Consumer<Exception> errorHandler;
-    private final Map<WatchKey, Path> watchedDirectories = new HashMap<>();
+    private final Map<WatchKey, Path> watchedDirectories = new ConcurrentHashMap<>();
 
     private WatchService watchService;
     private Thread thread;
@@ -134,11 +134,15 @@ public final class ResourcePackWatcher implements AutoCloseable {
     @Override
     public synchronized void close() throws IOException {
         running = false;
-        if (watchService != null) {
-            watchService.close();
+        WatchService currentService = watchService;
+        watchService = null;
+        if (currentService != null) {
+            currentService.close();
         }
-        if (thread != null) {
-            thread.interrupt();
+        Thread currentThread = thread;
+        thread = null;
+        if (currentThread != null && currentThread != Thread.currentThread()) {
+            currentThread.interrupt();
         }
         watchedDirectories.clear();
     }
