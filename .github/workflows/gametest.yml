@@ -29,11 +29,29 @@ jobs:
         shell: bash
         run: |
           set +e
-          ./gradlew runGameTestServer --no-daemon > gametest.log 2>&1
+          timeout --signal=TERM --kill-after=15s 300s \
+            ./gradlew runGameTestServer --no-daemon > gametest.log 2>&1
           status=$?
           set -e
+
           cat gametest.log
-          exit "$status"
+
+          if ! grep -Eq 'All 3 required tests passed :\)' gametest.log; then
+            echo 'Required GameTest success summary was not found.'
+            exit 1
+          fi
+
+          if grep -Eq '[1-9][0-9]* required test(s)? failed|required tests failed :\(' gametest.log; then
+            echo 'GameTest reported a required test failure.'
+            exit 1
+          fi
+
+          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ] && [ "$status" -ne 143 ]; then
+            echo "GameTest process ended with unexpected status $status."
+            exit "$status"
+          fi
+
+          echo 'GameTest gate passed with all three required tests successful.'
 
       - name: Upload GameTest evidence
         if: always()
