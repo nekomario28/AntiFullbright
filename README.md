@@ -106,6 +106,7 @@ When `watchResourcePacks = true`, Java `WatchService` recursively monitors `reso
 
 - create, modify, delete, and overflow conditions trigger a debounced full rescan
 - newly created subdirectories are registered
+- deletion and recreation of `resourcepacks` itself is recovered through a parent-directory watch
 - a runtime blocking finding is handled on the Minecraft main thread
 - the current world is left through Minecraft's normal disconnect path and a blocking screen is displayed
 - the JVM is not terminated directly
@@ -133,6 +134,14 @@ Settings are generated in `config/antifullbright-client.toml`:
 - `blockedResourcePackSha256`
 
 Comma-separated identifiers and tokens are compared case-insensitively. Hashes are 64 hexadecimal SHA-256 values with an optional `sha256:` prefix.
+
+### Privacy and enforcement scope
+
+This beta does not transmit scanned file contents, filenames, local paths, hashes, or scan results over the network. Classification remains inside the client and is shown only in local logs and the blocking screen.
+
+Local logs or crash reports may contain paths to affected files. Review and redact paths containing account names, home directories, or other private information before sharing those files with third parties.
+
+These settings are controlled by the player’s local client. The server cannot currently fix or verify the enabled state or policy content, so this beta must not be treated as server-enforced anti-cheat.
 
 ## Data-pack tags
 
@@ -175,4 +184,4 @@ This client scanner is not tamper-proof.
 - A normal server mod cannot fully trust data controlled by the client.
 - Strict deployments should combine a controlled launcher, signed manifests, and the existing server-side behavioral detector.
 
-`1.1.0` should not be released as stable until unit tests, a physical-client launch, and a dedicated-server launch have all passed.
+Do not publish stable `1.1.0` until the generated JAR has been tested in a normal launcher-managed NeoForge client profile and the icon and final policy have been approved.
