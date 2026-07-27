@@ -1,0 +1,45 @@
+name: Packaged Server
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  packaged-server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Build beta JAR
+        run: ./gradlew clean build --no-daemon
+
+      - name: Install official NeoForge and run packaged JAR
+        shell: bash
+        run: bash .github/scripts/packaged-server-smoke.sh
+
+      - name: Upload packaged-server evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-server-evidence
+          path: |
+            packaged-server-install.log
+            packaged-server.log
+            packaged-server-mod.sha256
+          if-no-files-found: warn
+          retention-days: 14
