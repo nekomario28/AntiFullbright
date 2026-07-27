@@ -36,6 +36,21 @@ class ContentScannerTest {
     }
 
     @Test
+    void dependencyModIdDoesNotReplaceDeclaredModId() throws IOException {
+        Path mods = Files.createDirectories(temporaryDirectory.resolve("mods"));
+        writeZip(mods.resolve("compatibility-helper.jar"), Map.of(
+                "META-INF/neoforge.mods.toml",
+                "[[mods]]\nmodId=\"safehelper\"\nversion=\"1\"\n"
+                        + "[[dependencies.safehelper]]\nmodId=\"fullbright\"\ntype=\"incompatible\"\n"
+        ));
+
+        ContentScanner.Report report = ContentScanner.scanMods(mods, policy(true));
+
+        assertFalse(report.hasBlockingFindings());
+        assertTrue(report.hasWarnings());
+    }
+
+    @Test
     void exactFabricRootIdProducesBlockingFinding() throws IOException {
         Path mods = Files.createDirectories(temporaryDirectory.resolve("mods"));
         writeZip(mods.resolve("fabric-helper.jar"), Map.of(
