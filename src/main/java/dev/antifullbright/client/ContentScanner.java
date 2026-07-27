@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -23,12 +25,24 @@ import java.util.zip.ZipFile;
 public final class ContentScanner {
     private static final Set<String> MOD_METADATA = Set.of(
             "meta-inf/neoforge.mods.toml", "meta-inf/mods.toml", "fabric.mod.json", "quilt.mod.json");
+    private static final Pattern TOML_MOD_ID = Pattern.compile(
+            "^\\s*modId\\s*=\\s*[\\\"']([a-z0-9_-]+)[\\\"']",
+            Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+    private static final Pattern JSON_MOD_ID = Pattern.compile(
+            "\\\"id\\\"\\s*:\\s*\\\"([a-z0-9_-]+)\\\"",
+            Pattern.CASE_INSENSITIVE);
 
     private ContentScanner() {}
 
+    public enum Severity {
+        WARNING,
+        BLOCK
+    }
+
     public record Policy(
-            Set<String> blockedModTokens,
-            Set<String> blockedPackTokens,
+            Set<String> blockedModIds,
+            Set<String> suspiciousModTokens,
+            Set<String> suspiciousPackTokens,
             Set<String> blockedPackPaths,
             Set<String> blockedModHashes,
             Set<String> blockedPackHashes,
@@ -36,8 +50,9 @@ public final class ContentScanner {
             int maximumTextBytes,
             boolean failClosed) {
         public Policy {
-            blockedModTokens = normalize(blockedModTokens, false);
-            blockedPackTokens = normalize(blockedPackTokens, false);
+            blockedModIds = normalize(blockedModIds, false);
+            suspiciousModTokens = normalize(suspiciousModTokens, false);
+            suspiciousPackTokens = normalize(suspiciousPackTokens, false);
             blockedPackPaths = normalize(blockedPackPaths, true);
             blockedModHashes = hashes(blockedModHashes);
             blockedPackHashes = hashes(blockedPackHashes);
@@ -46,9 +61,9 @@ public final class ContentScanner {
         }
     }
 
-    public record Finding(String category, Path path, String rule, String detail) {
+    public record Finding(Severity severity, String category, Path path, String rule, String detail) {
         public String display() {
-            return category + ": " + path + " [" + rule + "] " + detail;
+            return severity + " " + category + ": " + path + " [" + rule + "] " + detail;
         }
     }
 
@@ -61,11 +76,26 @@ public final class ContentScanner {
             return findings.isEmpty();
         }
 
+        public boolean hasBlockingFindings() {
+            return findings.stream().anyMatch(finding -> finding.severity() == Severity.BLOCK);
+        }
+
+        public boolean hasWarnings() {
+            return findings.stream().anyMatch(finding -> finding.severity() == Severity.WARNING);
+        }
+
+        public List<Finding> blockingFindings() {
+            return findings.stream().filter(finding -> finding.severity() == Severity.BLOCK).toList();
+        }
+
         public String summary() {
             if (clean()) {
-                return "No blocked content found (mods=" + modsScanned + ", resourcePacks=" + packsScanned + ").";
+                return "No findings (mods=" + modsScanned + ", resourcePacks=" + packsScanned + ").";
             }
-            StringBuilder result = new StringBuilder("Blocked or unreadable content detected:");
+            long blocks = findings.stream().filter(finding -> finding.severity() == Severity.BLOCK).count();
+            long warnings = findings.size() - blocks;
+            StringBuilder result = new StringBuilder("Content scan findings (blocks=")
+                    .append(blocks).append(", warnings=").append(warnings).append("):");
             findings.forEach(finding -> result.append(System.lineSeparator()).append(" - ").append(finding.display()));
             return result.toString();
         }
@@ -100,7 +130,7 @@ public final class ContentScanner {
                 inspectMod(file, policy).ifPresent(findings::add);
             }
         } catch (IOException error) {
-            addError(findings, policy, "mods", directory, error);
+            findings.add(io(policy, "mods", directory, error));
         }
         return new Report(scanned, 0, findings);
     }
@@ -116,7 +146,7 @@ public final class ContentScanner {
                 inspectPack(pack, unpacked, policy).ifPresent(findings::add);
             }
         } catch (IOException error) {
-            addError(findings, policy, "resourcepack", directory, error);
+            findings.add(io(policy, "resourcepack", directory, error));
         }
         return new Report(0, scanned, findings);
     }
@@ -135,80 +165,112 @@ public final class ContentScanner {
         try {
             Optional<Finding> hash = blockedHash("mod", file, policy.blockedModHashes());
             if (hash.isPresent()) return hash;
-            try (ZipFile zip = new ZipFile(file.toFile())) {
-                Optional<String> name = match(lower(file.getFileName().toString()), policy.blockedModTokens());
-                if (name.isPresent()) return finding("mod", file, "blocked_name", name.get());
 
+            Optional<Finding> warning = match(lower(file.getFileName().toString()), policy.suspiciousModTokens())
+                    .map(token -> warning("mod", file, "suspicious_name", token));
+
+            try (ZipFile zip = new ZipFile(file.toFile())) {
                 int count = 0;
                 for (var entries = zip.entries().asIterator(); entries.hasNext();) {
                     ZipEntry entry = entries.next();
-                    if (++count > policy.maximumEntries()) return limit("mod", file, policy.maximumEntries());
-                    String path = path(entry.getName());
-                    Optional<String> pathToken = match(path, policy.blockedModTokens());
-                    if (pathToken.isPresent()) return finding("mod", file, "blocked_archive_path", pathToken.get());
-                    if (!entry.isDirectory() && MOD_METADATA.contains(path)) {
-                        Optional<String> metadata = match(read(zip, entry, policy), policy.blockedModTokens());
-                        if (metadata.isPresent()) return finding("mod", file, "blocked_metadata", metadata.get());
+                    if (++count > policy.maximumEntries()) return Optional.of(limit(policy, "mod", file));
+                    String entryPath = path(entry.getName());
+
+                    if (warning.isEmpty()) {
+                        warning = match(entryPath, policy.suspiciousModTokens())
+                                .map(token -> warning("mod", file, "suspicious_archive_path", token));
+                    }
+
+                    if (!entry.isDirectory() && MOD_METADATA.contains(entryPath)) {
+                        String metadata = read(zip, entry, policy);
+                        for (String modId : parseModIds(entryPath, metadata)) {
+                            if (policy.blockedModIds().contains(modId)) {
+                                return Optional.of(block("mod", file, "blocked_mod_id", modId));
+                            }
+                        }
+                        if (warning.isEmpty()) {
+                            warning = match(metadata, policy.suspiciousModTokens())
+                                    .map(token -> warning("mod", file, "suspicious_metadata", token));
+                        }
                     }
                 }
             }
+            return warning;
         } catch (IOException error) {
-            if (policy.failClosed()) return Optional.of(io("mod", file, error));
+            return Optional.of(io(policy, "mod", file, error));
         }
-        return Optional.empty();
     }
 
     private static Optional<Finding> inspectPack(Path pack, boolean unpacked, Policy policy) {
-        Optional<String> name = match(lower(pack.getFileName().toString()), policy.blockedPackTokens());
-        if (name.isPresent()) return finding("resourcepack", pack, "blocked_name", name.get());
+        Optional<Finding> warning = match(lower(pack.getFileName().toString()), policy.suspiciousPackTokens())
+                .map(token -> warning("resourcepack", pack, "suspicious_name", token));
         try {
             Optional<Finding> hash = blockedHash("resourcepack", pack, policy.blockedPackHashes());
             if (hash.isPresent()) return hash;
-            return unpacked ? inspectPackDirectory(pack, policy) : inspectPackZip(pack, policy);
+            Optional<Finding> inspected = unpacked
+                    ? inspectPackDirectory(pack, policy, warning)
+                    : inspectPackZip(pack, policy, warning);
+            return inspected.isPresent() ? inspected : warning;
         } catch (IOException error) {
-            return policy.failClosed() ? Optional.of(io("resourcepack", pack, error)) : Optional.empty();
+            return Optional.of(io(policy, "resourcepack", pack, error));
         }
     }
 
-    private static Optional<Finding> inspectPackZip(Path pack, Policy policy) throws IOException {
+    private static Optional<Finding> inspectPackZip(
+            Path pack, Policy policy, Optional<Finding> initialWarning) throws IOException {
+        Optional<Finding> warning = initialWarning;
         try (ZipFile zip = new ZipFile(pack.toFile())) {
             int count = 0;
             for (var entries = zip.entries().asIterator(); entries.hasNext();) {
                 ZipEntry entry = entries.next();
-                if (++count > policy.maximumEntries()) return limit("resourcepack", pack, policy.maximumEntries());
-                String path = path(entry.getName());
-                Optional<String> signature = match(path, policy.blockedPackPaths());
-                if (signature.isPresent()) return finding("resourcepack", pack, "blocked_pack_path", signature.get());
-                if (!entry.isDirectory() && path.equals("pack.mcmeta")) {
-                    Optional<String> metadata = match(read(zip, entry, policy), policy.blockedPackTokens());
-                    if (metadata.isPresent()) return finding("resourcepack", pack, "blocked_metadata", metadata.get());
+                if (++count > policy.maximumEntries()) return Optional.of(limit(policy, "resourcepack", pack));
+                String entryPath = path(entry.getName());
+                Optional<String> signature = match(entryPath, policy.blockedPackPaths());
+                if (signature.isPresent()) return Optional.of(block("resourcepack", pack, "blocked_pack_path", signature.get()));
+                if (!entry.isDirectory() && entryPath.equals("pack.mcmeta") && warning.isEmpty()) {
+                    warning = match(read(zip, entry, policy), policy.suspiciousPackTokens())
+                            .map(token -> warning("resourcepack", pack, "suspicious_metadata", token));
                 }
             }
         }
-        return Optional.empty();
+        return warning;
     }
 
-    private static Optional<Finding> inspectPackDirectory(Path pack, Policy policy) throws IOException {
+    private static Optional<Finding> inspectPackDirectory(
+            Path pack, Policy policy, Optional<Finding> initialWarning) throws IOException {
+        Optional<Finding> warning = initialWarning;
         List<Path> paths;
         try (var stream = Files.walk(pack)) {
             paths = stream.limit((long) policy.maximumEntries() + 1).toList();
         }
-        if (paths.size() > policy.maximumEntries()) return limit("resourcepack", pack, policy.maximumEntries());
+        if (paths.size() > policy.maximumEntries()) return Optional.of(limit(policy, "resourcepack", pack));
         for (Path current : paths) {
             if (Files.isSymbolicLink(current)) continue;
             String relative = path(pack.relativize(current).toString());
             Optional<String> signature = match(relative, policy.blockedPackPaths());
-            if (signature.isPresent()) return finding("resourcepack", pack, "blocked_pack_path", signature.get());
-            if (relative.equals("pack.mcmeta") && Files.isRegularFile(current, LinkOption.NOFOLLOW_LINKS)) {
+            if (signature.isPresent()) return Optional.of(block("resourcepack", pack, "blocked_pack_path", signature.get()));
+            if (relative.equals("pack.mcmeta")
+                    && warning.isEmpty()
+                    && Files.isRegularFile(current, LinkOption.NOFOLLOW_LINKS)) {
                 String metadata;
                 try (InputStream input = Files.newInputStream(current)) {
                     metadata = lower(new String(input.readNBytes(policy.maximumTextBytes()), StandardCharsets.UTF_8));
                 }
-                Optional<String> token = match(metadata, policy.blockedPackTokens());
-                if (token.isPresent()) return finding("resourcepack", pack, "blocked_metadata", token.get());
+                warning = match(metadata, policy.suspiciousPackTokens())
+                        .map(token -> warning("resourcepack", pack, "suspicious_metadata", token));
             }
         }
-        return Optional.empty();
+        return warning;
+    }
+
+    private static Set<String> parseModIds(String metadataPath, String metadata) {
+        Pattern pattern = metadataPath.endsWith(".toml") ? TOML_MOD_ID : JSON_MOD_ID;
+        Matcher matcher = pattern.matcher(metadata);
+        LinkedHashSet<String> ids = new LinkedHashSet<>();
+        while (matcher.find()) {
+            ids.add(lower(matcher.group(1)));
+        }
+        return Set.copyOf(ids);
     }
 
     private static String read(ZipFile zip, ZipEntry entry, Policy policy) throws IOException {
@@ -220,7 +282,7 @@ public final class ContentScanner {
     private static Optional<Finding> blockedHash(String category, Path target, Set<String> blocked) throws IOException {
         if (blocked.isEmpty()) return Optional.empty();
         String hash = Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS) ? hashDirectory(target) : hashFile(target);
-        return blocked.contains(hash) ? finding(category, target, "blocked_sha256", hash) : Optional.empty();
+        return blocked.contains(hash) ? Optional.of(block(category, target, "blocked_sha256", hash)) : Optional.empty();
     }
 
     private static String hashFile(Path file) throws IOException {
@@ -262,20 +324,24 @@ public final class ContentScanner {
         return tokens.stream().filter(token -> !token.isEmpty() && value.contains(token)).findFirst();
     }
 
-    private static Optional<Finding> finding(String category, Path path, String rule, String token) {
-        return Optional.of(new Finding(category, path, rule, "Matched: " + token));
+    private static Finding block(String category, Path path, String rule, String token) {
+        return new Finding(Severity.BLOCK, category, path, rule, "Matched: " + token);
     }
 
-    private static Optional<Finding> limit(String category, Path path, int maximum) {
-        return Optional.of(new Finding(category, path, "entry_limit", "Exceeded " + maximum + " entries."));
+    private static Finding warning(String category, Path path, String rule, String token) {
+        return new Finding(Severity.WARNING, category, path, rule, "Matched: " + token);
     }
 
-    private static Finding io(String category, Path path, IOException error) {
-        return new Finding(category, path, "scan_io_error", error.getClass().getSimpleName() + ": " + error.getMessage());
+    private static Finding limit(Policy policy, String category, Path path) {
+        Severity severity = policy.failClosed() ? Severity.BLOCK : Severity.WARNING;
+        return new Finding(severity, category, path, "entry_limit",
+                "Exceeded " + policy.maximumEntries() + " entries.");
     }
 
-    private static void addError(List<Finding> findings, Policy policy, String category, Path path, IOException error) {
-        if (policy.failClosed()) findings.add(io(category, path, error));
+    private static Finding io(Policy policy, String category, Path path, IOException error) {
+        Severity severity = policy.failClosed() ? Severity.BLOCK : Severity.WARNING;
+        return new Finding(severity, category, path, "scan_io_error",
+                error.getClass().getSimpleName() + ": " + String.valueOf(error.getMessage()));
     }
 
     private static Report empty() {
