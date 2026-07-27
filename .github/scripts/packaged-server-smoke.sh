@@ -25,7 +25,8 @@ curl --fail --silent --show-error --location \
     --output "${INSTALLER}"
 curl --fail --silent --show-error --location \
     "${INSTALLER_BASE}/${INSTALLER}.sha256" \
-    --output "${INSTALLER}.sha256"\n
+    --output "${INSTALLER}.sha256"
+
 expected_installer_sha="$(awk 'NR == 1 { print $1 }' "${INSTALLER}.sha256")"
 actual_installer_sha="$(sha256sum "${INSTALLER}" | awk '{ print $1 }')"
 if [[ ! "${expected_installer_sha}" =~ ^[0-9a-fA-F]{64}$ ]]; then
