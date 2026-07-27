@@ -25,8 +25,18 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
-      - name: Build
-        run: ./gradlew build --no-daemon
+      - name: Build and test
+        shell: bash
+        run: |
+          set +e
+          ./gradlew build --no-daemon > gradle-build.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "Gradle build failed; showing the final 160 lines."
+            tail -n 160 gradle-build.log
+            exit "$status"
+          fi
+          tail -n 40 gradle-build.log
 
       - name: Upload mod artifact
         uses: actions/upload-artifact@v4
