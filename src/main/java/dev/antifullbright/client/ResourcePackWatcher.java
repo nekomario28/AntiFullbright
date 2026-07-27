@@ -18,6 +18,7 @@ import java.util.function.Consumer;
 /** Watches the resource-pack directory recursively and coalesces changes into full rescans. */
 public final class ResourcePackWatcher implements AutoCloseable {
     private final Path root;
+    private final Path rootParent;
     private final long debounceMillis;
     private final Runnable rescan;
     private final Consumer<Exception> errorHandler;
@@ -28,7 +29,8 @@ public final class ResourcePackWatcher implements AutoCloseable {
     private volatile boolean running;
 
     public ResourcePackWatcher(Path root, long debounceMillis, Runnable rescan, Consumer<Exception> errorHandler) {
-        this.root = root;
+        this.root = root.toAbsolutePath().normalize();
+        this.rootParent = this.root.getParent();
         this.debounceMillis = Math.max(100L, debounceMillis);
         this.rescan = rescan;
         this.errorHandler = errorHandler;
@@ -40,6 +42,9 @@ public final class ResourcePackWatcher implements AutoCloseable {
         }
         Files.createDirectories(root);
         watchService = FileSystems.getDefault().newWatchService();
+        if (rootParent != null) {
+            registerDirectory(rootParent);
+        }
         registerRecursively(root);
         running = true;
         thread = new Thread(this::watchLoop, "antifullbright-resourcepack-watch");
@@ -99,7 +104,12 @@ public final class ResourcePackWatcher implements AutoCloseable {
                 changed = true;
                 continue;
             }
-            Path affected = directory.resolve(relative);
+
+            Path affected = directory.resolve(relative).toAbsolutePath().normalize();
+            if (directory.equals(rootParent) && !affected.equals(root)) {
+                continue;
+            }
+
             changed = true;
             if (kind == StandardWatchEventKinds.ENTRY_CREATE
                     && Files.isDirectory(affected, LinkOption.NOFOLLOW_LINKS)
@@ -115,20 +125,31 @@ public final class ResourcePackWatcher implements AutoCloseable {
     }
 
     private void registerRecursively(Path start) throws IOException {
+        if (!Files.isDirectory(start, LinkOption.NOFOLLOW_LINKS) || Files.isSymbolicLink(start)) {
+            return;
+        }
         try (var paths = Files.walk(start)) {
             for (Path directory : paths
                     .filter(path -> Files.isDirectory(path, LinkOption.NOFOLLOW_LINKS))
                     .filter(path -> !Files.isSymbolicLink(path))
                     .toList()) {
-                WatchKey key = directory.register(
-                        watchService,
-                        StandardWatchEventKinds.ENTRY_CREATE,
-                        StandardWatchEventKinds.ENTRY_MODIFY,
-                        StandardWatchEventKinds.ENTRY_DELETE
-                );
-                watchedDirectories.put(key, directory);
+                registerDirectory(directory);
             }
         }
+    }
+
+    private void registerDirectory(Path directory) throws IOException {
+        WatchService currentService = watchService;
+        if (currentService == null) {
+            throw new ClosedWatchServiceException();
+        }
+        WatchKey key = directory.register(
+                currentService,
+                StandardWatchEventKinds.ENTRY_CREATE,
+                StandardWatchEventKinds.ENTRY_MODIFY,
+                StandardWatchEventKinds.ENTRY_DELETE
+        );
+        watchedDirectories.put(key, directory.toAbsolutePath().normalize());
     }
 
     @Override
