@@ -36,6 +36,51 @@ class ContentScannerTest {
     }
 
     @Test
+    void exactFabricRootIdProducesBlockingFinding() throws IOException {
+        Path mods = Files.createDirectories(temporaryDirectory.resolve("mods"));
+        writeZip(mods.resolve("fabric-helper.jar"), Map.of(
+                "fabric.mod.json",
+                "{\"schemaVersion\":1,\"id\":\"fullbright\",\"version\":\"1\"}"
+        ));
+
+        ContentScanner.Report report = ContentScanner.scanMods(mods, policy(true));
+
+        assertTrue(report.hasBlockingFindings());
+        assertTrue(report.blockingFindings().stream()
+                .anyMatch(finding -> finding.rule().equals("blocked_mod_id")));
+    }
+
+    @Test
+    void nestedFabricIdDoesNotReplaceRootModId() throws IOException {
+        Path mods = Files.createDirectories(temporaryDirectory.resolve("mods"));
+        writeZip(mods.resolve("safe-fabric-helper.jar"), Map.of(
+                "fabric.mod.json",
+                "{\"schemaVersion\":1,\"id\":\"safehelper\",\"version\":\"1\","
+                        + "\"custom\":{\"id\":\"fullbright\"}}"
+        ));
+
+        ContentScanner.Report report = ContentScanner.scanMods(mods, policy(true));
+
+        assertFalse(report.hasBlockingFindings());
+        assertTrue(report.hasWarnings());
+    }
+
+    @Test
+    void exactQuiltLoaderIdProducesBlockingFinding() throws IOException {
+        Path mods = Files.createDirectories(temporaryDirectory.resolve("mods"));
+        writeZip(mods.resolve("quilt-helper.jar"), Map.of(
+                "quilt.mod.json",
+                "{\"schema_version\":1,\"quilt_loader\":{\"id\":\"fullbright\",\"version\":\"1\"}}"
+        ));
+
+        ContentScanner.Report report = ContentScanner.scanMods(mods, policy(true));
+
+        assertTrue(report.hasBlockingFindings());
+        assertTrue(report.blockingFindings().stream()
+                .anyMatch(finding -> finding.rule().equals("blocked_mod_id")));
+    }
+
+    @Test
     void suspiciousDescriptionWarnsWithoutBlocking() throws IOException {
         Path mods = Files.createDirectories(temporaryDirectory.resolve("mods"));
         writeZip(mods.resolve("safe-helper.jar"), Map.of(
