@@ -1,7 +1,10 @@
 package dev.antifullbright.client;
 
 import dev.antifullbright.AntiFullbright;
-import dev.antifullbright.ClientScanConfig;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.DisconnectedScreen;
+import net.minecraft.client.gui.screens.TitleScreen;
+import net.minecraft.network.chat.Component;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.loading.FMLPaths;
@@ -15,8 +18,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Starts the client scan after the client config has loaded. */
 public final class ClientScanBootstrap {
-    private static final int BLOCKED_CONTENT_EXIT_CODE = 23;
     private static final AtomicBoolean STARTED = new AtomicBoolean();
+    private static final AtomicBoolean RUNTIME_BLOCK_SHOWN = new AtomicBoolean();
     private static volatile ResourcePackWatcher watcher;
 
     private ClientScanBootstrap() {}
@@ -32,10 +35,10 @@ public final class ClientScanBootstrap {
 
         Path gameDirectory = FMLPaths.GAMEDIR.get();
         ContentScanner.Report report = scan(gameDirectory);
-        if (!report.clean()) {
-            throw new IllegalStateException("AntiFullbright blocked client startup. " + report.summary());
+        logReport("Client content scan", report);
+        if (report.hasBlockingFindings()) {
+            throw new IllegalStateException("AntiFullbright blocked client setup. " + report.summary());
         }
-        AntiFullbright.LOGGER.info("Client content scan completed: {}", report.summary());
 
         if (ClientScanConfig.WATCH_RESOURCE_PACKS.getAsBoolean()
                 && ClientScanConfig.SCAN_RESOURCE_PACKS.getAsBoolean()) {
@@ -86,11 +89,10 @@ public final class ClientScanBootstrap {
     private static void rescanResourcePacks(Path resourcePacksDirectory) {
         ContentScanner.Report report = ContentScanner.scanResourcePacks(
                 resourcePacksDirectory, ClientScanConfig.policy());
-        if (report.clean()) {
-            AntiFullbright.LOGGER.info("Resource-pack rescan completed: {}", report.summary());
-            return;
+        logReport("Resource-pack rescan", report);
+        if (report.hasBlockingFindings()) {
+            blockRunningClient(report.summary());
         }
-        blockRunningClient(report.summary());
     }
 
     private static void watcherFailed(Exception exception) {
@@ -103,11 +105,35 @@ public final class ClientScanBootstrap {
         }
     }
 
-    private static void blockRunningClient(String reason) {
-        AntiFullbright.LOGGER.error("AntiFullbright blocked the running client. {}", reason);
-        if (ClientScanConfig.EXIT_ON_RUNTIME_DETECTION.getAsBoolean()) {
-            System.exit(BLOCKED_CONTENT_EXIT_CODE);
+    private static void logReport(String operation, ContentScanner.Report report) {
+        if (report.hasBlockingFindings()) {
+            AntiFullbright.LOGGER.error("{} completed with blocking findings: {}", operation, report.summary());
+        } else if (report.hasWarnings()) {
+            AntiFullbright.LOGGER.warn("{} completed with warnings: {}", operation, report.summary());
+        } else {
+            AntiFullbright.LOGGER.info("{} completed: {}", operation, report.summary());
         }
+    }
+
+    private static void blockRunningClient(String reason) {
+        AntiFullbright.LOGGER.error("AntiFullbright blocked local content while the client was running. {}", reason);
+        closeWatcher();
+        if (!ClientScanConfig.DISCONNECT_ON_RUNTIME_DETECTION.getAsBoolean()
+                || !RUNTIME_BLOCK_SHOWN.compareAndSet(false, true)) {
+            return;
+        }
+
+        Minecraft minecraft = Minecraft.getInstance();
+        minecraft.execute(() -> {
+            Component title = Component.literal("AntiFullbright blocked local content");
+            Component details = Component.literal(reason);
+            DisconnectedScreen screen = new DisconnectedScreen(new TitleScreen(), title, details);
+            if (minecraft.level != null || minecraft.getConnection() != null) {
+                minecraft.disconnect(screen);
+            } else {
+                minecraft.forceSetScreen(screen);
+            }
+        });
     }
 
     private static synchronized void closeWatcher() {
