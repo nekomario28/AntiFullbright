@@ -5,7 +5,7 @@
 - Repository: `nekomario28/AntiFullbright`
 - Pull request: `#1`
 - Branch: `agent/client-content-scanner`
-- Exact evidence head: `d73681a31860ce2419ddb36677c1a3cbc0b2b414`
+- Exact evidence head: `521202557b1668f487c44f0339d8b530c23cdb11`
 - Base: `main@b39b39e6f7886216d2bf5db9393eec71fccb1871`
 - Candidate version: `1.1.0-beta.1`
 - PR state at evidence capture: Draft
@@ -18,9 +18,9 @@ This document records evidence for the beta implementation. It does not claim ta
 
 ### Build workflow
 
-GitHub Actions run: `30289326327`
+GitHub Actions run: `30290378662`
 
-The run completed successfully at exact head `d73681a31860ce2419ddb36677c1a3cbc0b2b414` and covered:
+The run completed successfully at exact head `521202557b1668f487c44f0339d8b530c23cdb11` and covered:
 
 - Java 21 setup
 - Gradle wrapper validation
@@ -37,15 +37,15 @@ Artifacts:
 
 | Artifact | Artifact ID | Artifact digest |
 | --- | ---: | --- |
-| `antifullbright` | `8662145817` | `sha256:49b3a26f41a78111072396710cdbbd74e7d8f2c0e8c296e4613e4a95098459c1` |
-| `gradle-build-log` | `8662145555` | `sha256:78f4b2d666030779a236a2e4ee78b0c941dccc683b5d7be9f6bf690ff5dccf3f` |
-| `dedicated-server-smoke-log` | `8662169909` | `sha256:bc5a2ba69c72b7cb4862e095ccb785bf92922884cb539d12e424c3d15d2e5ff6` |
-| `physical-client-resourcepack-mutation-log` | `8662186676` | `sha256:776e29a2231dabb91915db1ae6b4de0ef9c0e6dd169699b5ed08d578f362004d` |
-| `physical-client-startup-block-log` | `8662198108` | `sha256:d84f13b1e604477850d314d1792c086b3f30b885130bd6302fcceecd4eb26ae0` |
+| `antifullbright` | `8662545895` | `sha256:eea283d91915661a379c202a1b05b745e6aef1b1806cdd7fbb73845602e79828` |
+| `gradle-build-log` | `8662545685` | `sha256:f0774858a398e5db4958b2a6c932c03ad7efb245051fadcfbe773d7d9c3bfd6f` |
+| `dedicated-server-smoke-log` | `8662569374` | `sha256:4cf56d47e203886fcecfbec6475e38ac6341292fe747e093af5c8f7836b5fc63` |
+| `physical-client-resourcepack-mutation-log` | `8662583800` | `sha256:9eecf4dddf893d689d01658d02ce2b5633d6c4d75c2ffd0d7affc8d2f8380064` |
+| `physical-client-startup-block-log` | `8662595650` | `sha256:64fd11b353d202c6dd42f5f8f49c7f757af35f802c4b9bbf3dbcceef007e8bf8` |
 
 ### Packaged-server workflow
 
-GitHub Actions run: `30289324759`
+GitHub Actions run: `30290378382`
 
 The separate packaged-server gate completed successfully at the same exact head. It:
 
@@ -59,16 +59,16 @@ The separate packaged-server gate completed successfully at the same exact head.
 Evidence values:
 
 - Verified NeoForge installer SHA-256: `58edd322dc3cbbcd5c75d9a44f93d01211fda2953665483077ddd41fbecf942c`
-- Generated AntiFullbright JAR SHA-256: `c0a6b418624284428a19ca0937dd609ac89264124ea1373e26f122595bfa41e3`
-- Packaged-server artifact ID: `8662172242`
-- Packaged-server artifact digest: `sha256:382d0b0a119d93ab0ef1b319f1f01ffa9a56fc97cd497a75f9219e215a621b86`
+- Generated AntiFullbright JAR SHA-256: `26774030e780001cf6f741a99667e8249b3cdfb7f2f19064bec0eb9d290ff23d`
+- Packaged-server artifact ID: `8662570558`
+- Packaged-server artifact digest: `sha256:371939b7b8e08351a4ddc6e264c572e39004b367644fcac9ee6c9ad713084da8`
 
 Required runtime markers were present:
 
 ```text
 Anti Fullbright 1.1.0-beta.1 (antifullbright)
 AntiFullbright dark-mining detection is ready
-Done (8.272s)! For help, type "help"
+Done (10.614s)! For help, type "help"
 ```
 
 ## Verified behavior
@@ -104,6 +104,10 @@ This verifies the requested create/change detection path, full rescan, prohibite
 
 The same prohibited resource pack remained in place for a new physical-client process. Client setup produced the exact blocking rule `blocked_pack_path` and did not reach a clean startup result.
 
+### Resource-pack root recreation
+
+A WatchService regression test deletes the entire watched `resourcepacks` directory, recreates it, and then writes a new file inside it. The parent-directory recovery watch re-registers the recreated root and observes the nested change.
+
 ### Dedicated-server class separation
 
 Both the development server and fresh packaged server started without client-class loading failures. The common entrypoint does not directly reference the client scanner entrypoint.
@@ -112,11 +116,16 @@ Both the development server and fresh packaged server started without client-cla
 
 The current JUnit suite verifies:
 
-- exact blocked Mod ID produces `BLOCK`;
+- exact NeoForge/Forge `[[mods]]` Mod ID produces `BLOCK`;
+- a blocked Mod ID used only in `[[dependencies.*]]` does not replace the declared Mod ID;
+- exact Fabric root `id` produces `BLOCK`;
+- a nested Fabric custom `id` does not replace the root Mod ID;
+- exact Quilt `quilt_loader.id` produces `BLOCK`;
 - a harmless description containing `fullbright` produces `WARNING` rather than `BLOCK`;
 - prohibited lightmap path produces `BLOCK`;
 - only the exact running AntiFullbright archive path is ignored;
-- malformed archives differ correctly between fail-open and fail-closed policies.
+- malformed archives differ correctly between fail-open and fail-closed policies;
+- deletion and recreation of the watched resource-pack root restores nested change notifications.
 
 ## Remaining limitations and gates
 
