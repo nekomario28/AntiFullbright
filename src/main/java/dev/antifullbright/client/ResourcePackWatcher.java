@@ -96,6 +96,7 @@ public final class ResourcePackWatcher implements AutoCloseable {
         for (WatchEvent<?> event : key.pollEvents()) {
             WatchEvent.Kind<?> kind = event.kind();
             if (kind == StandardWatchEventKinds.OVERFLOW) {
+                registerRecursively(root);
                 changed = true;
                 continue;
             }
