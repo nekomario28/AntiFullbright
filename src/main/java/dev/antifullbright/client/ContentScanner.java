@@ -1,5 +1,10 @@
 package dev.antifullbright.client;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -28,9 +33,7 @@ public final class ContentScanner {
     private static final Pattern TOML_MOD_ID = Pattern.compile(
             "^\\s*modId\\s*=\\s*[\\\"']([a-z0-9_-]+)[\\\"']",
             Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
-    private static final Pattern JSON_MOD_ID = Pattern.compile(
-            "\\\"id\\\"\\s*:\\s*\\\"([a-z0-9_-]+)\\\"",
-            Pattern.CASE_INSENSITIVE);
+    private static final Pattern VALID_MOD_ID = Pattern.compile("[a-z0-9_-]+");
 
     private ContentScanner() {}
 
@@ -189,7 +192,7 @@ public final class ContentScanner {
                             }
                         }
                         if (warning.isEmpty()) {
-                            warning = match(metadata, policy.suspiciousModTokens())
+                            warning = match(lower(metadata), policy.suspiciousModTokens())
                                     .map(token -> warning("mod", file, "suspicious_metadata", token));
                         }
                     }
@@ -226,9 +229,11 @@ public final class ContentScanner {
                 if (++count > policy.maximumEntries()) return Optional.of(limit(policy, "resourcepack", pack));
                 String entryPath = path(entry.getName());
                 Optional<String> signature = match(entryPath, policy.blockedPackPaths());
-                if (signature.isPresent()) return Optional.of(block("resourcepack", pack, "blocked_pack_path", signature.get()));
+                if (signature.isPresent()) {
+                    return Optional.of(block("resourcepack", pack, "blocked_pack_path", signature.get()));
+                }
                 if (!entry.isDirectory() && entryPath.equals("pack.mcmeta") && warning.isEmpty()) {
-                    warning = match(read(zip, entry, policy), policy.suspiciousPackTokens())
+                    warning = match(lower(read(zip, entry, policy)), policy.suspiciousPackTokens())
                             .map(token -> warning("resourcepack", pack, "suspicious_metadata", token));
                 }
             }
@@ -248,7 +253,9 @@ public final class ContentScanner {
             if (Files.isSymbolicLink(current)) continue;
             String relative = path(pack.relativize(current).toString());
             Optional<String> signature = match(relative, policy.blockedPackPaths());
-            if (signature.isPresent()) return Optional.of(block("resourcepack", pack, "blocked_pack_path", signature.get()));
+            if (signature.isPresent()) {
+                return Optional.of(block("resourcepack", pack, "blocked_pack_path", signature.get()));
+            }
             if (relative.equals("pack.mcmeta")
                     && warning.isEmpty()
                     && Files.isRegularFile(current, LinkOption.NOFOLLOW_LINKS)) {
@@ -264,18 +271,42 @@ public final class ContentScanner {
     }
 
     private static Set<String> parseModIds(String metadataPath, String metadata) {
-        Pattern pattern = metadataPath.endsWith(".toml") ? TOML_MOD_ID : JSON_MOD_ID;
-        Matcher matcher = pattern.matcher(metadata);
         LinkedHashSet<String> ids = new LinkedHashSet<>();
-        while (matcher.find()) {
-            ids.add(lower(matcher.group(1)));
+        if (metadataPath.endsWith(".toml")) {
+            Matcher matcher = TOML_MOD_ID.matcher(metadata);
+            while (matcher.find()) {
+                ids.add(lower(matcher.group(1)));
+            }
+            return Set.copyOf(ids);
+        }
+
+        try {
+            JsonElement parsed = JsonParser.parseString(metadata);
+            if (!parsed.isJsonObject()) return Set.of();
+            JsonObject root = parsed.getAsJsonObject();
+            if (metadataPath.equals("fabric.mod.json")) {
+                addJsonModId(ids, root.get("id"));
+            } else if (metadataPath.equals("quilt.mod.json")) {
+                JsonElement loader = root.get("quilt_loader");
+                if (loader != null && loader.isJsonObject()) {
+                    addJsonModId(ids, loader.getAsJsonObject().get("id"));
+                }
+            }
+        } catch (JsonParseException | IllegalStateException ignored) {
+            // Invalid metadata is handled as suspicious text, not as a fabricated exact Mod ID.
         }
         return Set.copyOf(ids);
     }
 
+    private static void addJsonModId(Set<String> ids, JsonElement value) {
+        if (value == null || !value.isJsonPrimitive() || !value.getAsJsonPrimitive().isString()) return;
+        String id = lower(value.getAsString().trim());
+        if (VALID_MOD_ID.matcher(id).matches()) ids.add(id);
+    }
+
     private static String read(ZipFile zip, ZipEntry entry, Policy policy) throws IOException {
         try (InputStream input = zip.getInputStream(entry)) {
-            return lower(new String(input.readNBytes(policy.maximumTextBytes()), StandardCharsets.UTF_8));
+            return new String(input.readNBytes(policy.maximumTextBytes()), StandardCharsets.UTF_8);
         }
     }
 
