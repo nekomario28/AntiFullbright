@@ -4,14 +4,23 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
 /** In-game regression coverage for datapack tags and server command registration. */
+@EventBusSubscriber(modid = AntiFullbright.MOD_ID)
 @GameTestHolder(AntiFullbright.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class ServerContractGameTests {
     private ServerContractGameTests() {}
+
+    @SubscribeEvent
+    public static void registerGameTests(RegisterGameTestsEvent event) {
+        event.register(ServerContractGameTests.class);
+    }
 
     @GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 20)
     public static void countedBlockTagContainsStone(GameTestHelper helper) {
