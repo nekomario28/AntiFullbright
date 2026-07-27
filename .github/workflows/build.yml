@@ -125,6 +125,7 @@ jobs:
         shell: bash
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
+          ALSOFT_DRIVERS: 'null'
         run: |
           set -u
           setsid xvfb-run -a ./gradlew runClient --no-daemon > physical-client.log 2>&1 &
@@ -186,8 +187,8 @@ jobs:
             exit 1
           fi
 
-          if grep -Eq 'NoClassDefFoundError|ClassNotFoundException|ModLoadingException|ModLoadingCrashException|Failed to create window|GLFW error' physical-client.log; then
-            echo "Physical client log contains a side, loading, or display failure."
+          if grep -Eq 'NoClassDefFoundError|ClassNotFoundException|ModLoadingException|ModLoadingCrashException|Failed to create window|GLFW error|Error starting SoundSystem' physical-client.log; then
+            echo "Physical client log contains a side, loading, display, or audio-environment failure."
             tail -n 260 physical-client.log
             exit 1
           fi
@@ -210,11 +211,63 @@ jobs:
           grep -F 'Resource-pack rescan completed with blocking findings:' physical-client.log | tail -n 1
           grep -F 'AntiFullbright blocked local content while the client was running.' physical-client.log | tail -n 1
 
-      - name: Upload physical client evidence
+      - name: Upload physical client mutation evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: physical-client-resourcepack-mutation-log
           path: physical-client.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Run physical client startup blocking gate
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          ALSOFT_DRIVERS: 'null'
+        run: |
+          set -u
+          setsid xvfb-run -a ./gradlew runClient --no-daemon > physical-client-startup-block.log 2>&1 &
+          process_id=$!
+          startup_blocked=0
+
+          for _ in $(seq 1 180); do
+            if grep -Fq 'AntiFullbright blocked client setup.' physical-client-startup-block.log 2>/dev/null \
+                && grep -Fq 'blocked_pack_path' physical-client-startup-block.log 2>/dev/null; then
+              startup_blocked=1
+              break
+            fi
+            if ! kill -0 "$process_id" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          kill -TERM -- "-$process_id" 2>/dev/null || true
+          sleep 3
+          kill -KILL -- "-$process_id" 2>/dev/null || true
+          wait "$process_id" 2>/dev/null || true
+
+          if [ "$startup_blocked" -ne 1 ]; then
+            echo "Existing prohibited resource pack did not block client setup with the expected rule."
+            tail -n 280 physical-client-startup-block.log
+            exit 1
+          fi
+
+          if grep -Eq 'NoClassDefFoundError|ClassNotFoundException|Failed to create window|GLFW error|Error starting SoundSystem' physical-client-startup-block.log; then
+            echo "Startup-block client log contains an unrelated side, display, or audio-environment failure."
+            tail -n 280 physical-client-startup-block.log
+            exit 1
+          fi
+
+          grep -F 'AntiFullbright blocked client setup.' physical-client-startup-block.log | tail -n 1
+          grep -F 'blocked_pack_path' physical-client-startup-block.log | tail -n 1
+
+      - name: Upload physical client startup-block evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: physical-client-startup-block-log
+          path: physical-client-startup-block.log
           if-no-files-found: warn
           retention-days: 14
