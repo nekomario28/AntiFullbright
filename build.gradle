@@ -32,7 +32,6 @@ runs {
     gameTestServer {
         systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
         modSource project.sourceSets.gameTest
-        setForceExit false
     }
 }
 
