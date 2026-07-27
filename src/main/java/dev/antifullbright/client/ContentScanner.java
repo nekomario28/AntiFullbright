@@ -30,9 +30,12 @@ import java.util.zip.ZipFile;
 public final class ContentScanner {
     private static final Set<String> MOD_METADATA = Set.of(
             "meta-inf/neoforge.mods.toml", "meta-inf/mods.toml", "fabric.mod.json", "quilt.mod.json");
+    private static final Pattern TOML_ARRAY_TABLE = Pattern.compile(
+            "^\\s*\\[\\[\\s*([^\\]]+)\\s*\\]\\]\\s*(?:#.*)?$",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern TOML_MOD_ID = Pattern.compile(
-            "^\\s*modId\\s*=\\s*[\\\"']([a-z0-9_-]+)[\\\"']",
-            Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+            "^\\s*modId\\s*=\\s*[\\\"']([a-z0-9_-]+)[\\\"']\\s*(?:#.*)?$",
+            Pattern.CASE_INSENSITIVE);
     private static final Pattern VALID_MOD_ID = Pattern.compile("[a-z0-9_-]+");
 
     private ContentScanner() {}
@@ -273,9 +276,18 @@ public final class ContentScanner {
     private static Set<String> parseModIds(String metadataPath, String metadata) {
         LinkedHashSet<String> ids = new LinkedHashSet<>();
         if (metadataPath.endsWith(".toml")) {
-            Matcher matcher = TOML_MOD_ID.matcher(metadata);
-            while (matcher.find()) {
-                ids.add(lower(matcher.group(1)));
+            boolean insideModsSection = false;
+            for (String line : metadata.split("\\R")) {
+                Matcher table = TOML_ARRAY_TABLE.matcher(line);
+                if (table.matches()) {
+                    insideModsSection = table.group(1).trim().equalsIgnoreCase("mods");
+                    continue;
+                }
+                if (!insideModsSection) continue;
+                Matcher modId = TOML_MOD_ID.matcher(line);
+                if (modId.matches()) {
+                    ids.add(lower(modId.group(1)));
+                }
             }
             return Set.copyOf(ids);
         }
