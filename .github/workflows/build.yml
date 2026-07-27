@@ -128,7 +128,9 @@ jobs:
           ALSOFT_DRIVERS: 'null'
         run: |
           set -u
-          setsid xvfb-run -a ./gradlew runClient --no-daemon > physical-client.log 2>&1 &
+          setsid env -u DISPLAY -u XAUTHORITY \
+            xvfb-run -a -s '-screen 0 1280x720x24 -ac' \
+            ./gradlew runClient --no-daemon </dev/null > physical-client.log 2>&1 &
           process_id=$!
           clean_ready=0
           runtime_blocked=0
@@ -227,7 +229,9 @@ jobs:
           ALSOFT_DRIVERS: 'null'
         run: |
           set -u
-          setsid xvfb-run -a ./gradlew runClient --no-daemon > physical-client-startup-block.log 2>&1 &
+          setsid env -u DISPLAY -u XAUTHORITY \
+            xvfb-run -a -s '-screen 0 1280x720x24 -ac' \
+            ./gradlew runClient --no-daemon </dev/null > physical-client-startup-block.log 2>&1 &
           process_id=$!
           startup_blocked=0
 
