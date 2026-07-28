@@ -144,6 +144,41 @@ public final class ServerContractGameTests {
         }
     }
 
+    @GameTest(
+            templateNamespace = AntiFullbright.MOD_ID,
+            template = "dark_room",
+            setupTicks = 40,
+            timeoutTicks = 40)
+    public static void placingTorchResetsActiveSession(GameTestHelper helper) {
+        DarkMiningManager manager = new DarkMiningManager();
+        ServerPlayer player = nonExcludedPlayer(helper);
+        try {
+            positionInsideRoom(helper, player);
+            BlockPos target = helper.absolutePos(new BlockPos(2, 1, 0));
+            assertFullyDark(helper, player, target);
+
+            manager.onBreak(player, helper.getLevel(), target, Blocks.STONE.defaultBlockState());
+            List<String> started = status(manager, helper, player);
+            if (!containsCount(started, 1)) {
+                helper.fail("Could not establish the precondition session before torch placement: " + started);
+                return;
+            }
+
+            BlockPos torchPosition = helper.absolutePos(new BlockPos(2, 1, 1));
+            manager.onPlace(player, helper.getLevel(), torchPosition, Blocks.TORCH.defaultBlockState());
+            List<String> reset = status(manager, helper, player);
+            if (!containsCount(reset, 0)) {
+                helper.fail("Tagged light-source placement did not reset the active session: " + reset);
+                return;
+            }
+
+            helper.succeed();
+        } finally {
+            manager.close();
+            player.discard();
+        }
+    }
+
     private static ServerPlayer nonExcludedPlayer(GameTestHelper helper) {
         return new ServerPlayer(
                 helper.getLevel().getServer(),
