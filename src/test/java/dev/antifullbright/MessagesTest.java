@@ -7,8 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class MessagesTest {
     @Test
     void englishAndJapaneseMessagesRemainAvailable() {
-        String originalLanguage = AntiFullbrightConfig.LANGUAGE.get();
-        try {
+        try (ConfigTestSupport ignored = ConfigTestSupport.attachDefaults()) {
             AntiFullbrightConfig.LANGUAGE.set("en_us");
             assertTrue(Messages.warning(1).startsWith("Warning:"));
             assertTrue(Messages.exclusion("operator").contains("server operator"));
@@ -18,8 +17,6 @@ final class MessagesTest {
             assertTrue(Messages.warning(1).startsWith("警告:"));
             assertTrue(Messages.exclusion("operator").contains("サーバーOP"));
             assertTrue(Messages.reloaded(2).contains("変更 2 件"));
-        } finally {
-            AntiFullbrightConfig.LANGUAGE.set(originalLanguage);
         }
     }
 }
