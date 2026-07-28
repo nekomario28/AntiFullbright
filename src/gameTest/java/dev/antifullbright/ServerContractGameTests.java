@@ -7,8 +7,10 @@ import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.Blocks;
@@ -155,6 +157,30 @@ public final class ServerContractGameTests {
     }
 
     @GameTest(templateNamespace = AntiFullbright.MOD_ID, template = "dark_room", setupTicks = 40, timeoutTicks = 40)
+    public static void heldTorchStartsGraceWithoutCounting(GameTestHelper helper) {
+        DarkMiningManager manager = new DarkMiningManager();
+        ServerPlayer player = nonExcludedPlayer(helper);
+        try {
+            positionInsideRoom(helper, player);
+            player.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.TORCH));
+            BlockPos target = helper.absolutePos(new BlockPos(2, 1, 0));
+            assertFullyDark(helper, player, target);
+            manager.onBreak(player, helper.getLevel(), target, Blocks.STONE.defaultBlockState());
+            List<String> status = status(manager, helper, player);
+            List<String> debug = debug(manager, helper, player);
+            if (!containsCount(status, 0) || !hasPositiveGrace(debug)) {
+                helper.fail("Held torch did not start an uncounted grace session: status="
+                        + status + ", debug=" + debug);
+                return;
+            }
+            helper.succeed();
+        } finally {
+            manager.close();
+            player.discard();
+        }
+    }
+
+    @GameTest(templateNamespace = AntiFullbright.MOD_ID, template = "dark_room", setupTicks = 40, timeoutTicks = 40)
     public static void nightVisionPlayerIsExcludedFromDarkMiningCount(GameTestHelper helper) {
         assertExcluded(helper, nightVisionPlayer(helper), "night vision effect", "暗視効果", "Night Vision player");
     }
@@ -256,5 +282,22 @@ public final class ServerContractGameTests {
     private static boolean containsCount(List<String> status, int count) {
         return status.stream().anyMatch(line ->
                 line.contains("countedBlocks=" + count) || line.contains("対象破壊数=" + count));
+    }
+
+    private static boolean hasPositiveGrace(List<String> debug) {
+        for (String line : debug) {
+            if (!line.contains("grace remaining seconds=") && !line.contains("光源所持猶予の残り秒数=")) {
+                continue;
+            }
+            int separator = line.lastIndexOf('=');
+            if (separator >= 0) {
+                try {
+                    return Long.parseLong(line.substring(separator + 1).trim()) > 0;
+                } catch (NumberFormatException ignored) {
+                    return false;
+                }
+            }
+        }
+        return false;
     }
 }
