@@ -93,6 +93,12 @@ if grep -Eq 'NoClassDefFoundError|ClassNotFoundException|ModLoadingException|Mod
     exit 1
 fi
 
+if grep -Fq 'Registered AntiFullbright GameTests' "${SERVER_LOG}"; then
+    echo "GameTest registration was unexpectedly activated in the packaged production server." >&2
+    tail -n 240 "${SERVER_LOG}" >&2
+    exit 1
+fi
+
 if ! grep -Fq "Anti Fullbright" "${SERVER_LOG}" || ! grep -Fq "${MOD_VERSION}" "${SERVER_LOG}"; then
     echo "Packaged server log does not contain the expected mod name and version." >&2
     tail -n 240 "${SERVER_LOG}" >&2
