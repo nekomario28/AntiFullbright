@@ -13,7 +13,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 public final class ServerContractGameTests {
     private ServerContractGameTests() {}
 
-    @GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 20)
+    @GameTest(templateNamespace = AntiFullbright.MOD_ID, template = "empty", timeoutTicks = 20)
     public static void countedBlockTagContainsStone(GameTestHelper helper) {
         if (!Blocks.STONE.defaultBlockState().is(ModTags.DARK_MINING_COUNTED_BLOCKS)) {
             helper.fail("minecraft:stone is missing from antifullbright:dark_mining_counted_blocks");
@@ -22,7 +22,7 @@ public final class ServerContractGameTests {
         helper.succeed();
     }
 
-    @GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 20)
+    @GameTest(templateNamespace = AntiFullbright.MOD_ID, template = "empty", timeoutTicks = 20)
     public static void lightSourceTagContainsTorch(GameTestHelper helper) {
         if (!Items.TORCH.getDefaultInstance().is(ModTags.DARK_MINING_LIGHT_SOURCES)) {
             helper.fail("minecraft:torch is missing from antifullbright:dark_mining_light_sources");
@@ -31,7 +31,7 @@ public final class ServerContractGameTests {
         helper.succeed();
     }
 
-    @GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 20)
+    @GameTest(templateNamespace = AntiFullbright.MOD_ID, template = "empty", timeoutTicks = 20)
     public static void darkMiningCommandIsRegistered(GameTestHelper helper) {
         var root = helper.getLevel().getServer().getCommands().getDispatcher().getRoot();
         if (root.getChild("darkmining") == null) {
