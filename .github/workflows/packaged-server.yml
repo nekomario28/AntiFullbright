@@ -38,7 +38,7 @@ jobs:
           fi
 
           jar tf "$jar_file" > packaged-jar-entries.txt
-          if grep -Eq 'ServerContractGameTests|src/gameTest|data/antifullbright/structure/empty\.nbt' packaged-jar-entries.txt; then
+          if grep -Eq 'ServerContractGameTests|src/gameTest|data/antifullbright/structure/' packaged-jar-entries.txt; then
             echo 'GameTest-only code or resources leaked into the beta JAR.'
             cat packaged-jar-entries.txt
             exit 1
