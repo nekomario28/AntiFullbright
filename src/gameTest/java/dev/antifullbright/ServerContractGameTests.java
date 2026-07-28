@@ -109,6 +109,41 @@ public final class ServerContractGameTests {
         }
     }
 
+    @GameTest(
+            templateNamespace = AntiFullbright.MOD_ID,
+            template = "dark_room",
+            setupTicks = 40,
+            timeoutTicks = 40)
+    public static void playerPlacedBlockIsExcludedOnce(GameTestHelper helper) {
+        DarkMiningManager manager = new DarkMiningManager();
+        ServerPlayer player = nonExcludedPlayer(helper);
+        try {
+            positionInsideRoom(helper, player);
+            BlockPos target = helper.absolutePos(new BlockPos(2, 1, 0));
+            assertFullyDark(helper, player, target);
+
+            manager.onPlace(player, helper.getLevel(), target, Blocks.STONE.defaultBlockState());
+            manager.onBreak(player, helper.getLevel(), target, Blocks.STONE.defaultBlockState());
+            List<String> firstStatus = status(manager, helper, player);
+            if (!containsCount(firstStatus, 0)) {
+                helper.fail("First break of a player-placed block was counted: " + firstStatus);
+                return;
+            }
+
+            manager.onBreak(player, helper.getLevel(), target, Blocks.STONE.defaultBlockState());
+            List<String> secondStatus = status(manager, helper, player);
+            if (!containsCount(secondStatus, 1)) {
+                helper.fail("Placed-block exclusion was not consumed exactly once: " + secondStatus);
+                return;
+            }
+
+            helper.succeed();
+        } finally {
+            manager.close();
+            player.discard();
+        }
+    }
+
     private static ServerPlayer nonExcludedPlayer(GameTestHelper helper) {
         return new ServerPlayer(
                 helper.getLevel().getServer(),
