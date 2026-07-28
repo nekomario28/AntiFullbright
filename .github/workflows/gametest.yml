@@ -47,12 +47,12 @@ jobs:
             exit 1
           fi
 
-          if ! grep -Fq '3 tests are now running' gametest.log; then
-            echo 'The expected three GameTests were not started.'
+          if ! grep -Fq '4 tests are now running' gametest.log; then
+            echo 'The expected four GameTests were not started.'
             exit 1
           fi
 
-          if ! grep -Fq 'All 3 required tests passed :)' gametest.log; then
+          if ! grep -Fq 'All 4 required tests passed :)' gametest.log; then
             echo 'Required GameTest success summary was not found.'
             exit 1
           fi
@@ -67,7 +67,7 @@ jobs:
             exit "$status"
           fi
 
-          echo 'GameTest gate passed with all three required tests successful.'
+          echo 'GameTest gate passed with all four required tests successful.'
 
       - name: Upload GameTest evidence
         if: always()
