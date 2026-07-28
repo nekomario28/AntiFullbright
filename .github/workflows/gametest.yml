@@ -25,6 +25,12 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
+      - name: Prepare GameTest server
+        shell: bash
+        run: |
+          mkdir -p run/gameTestServer
+          printf 'online-mode=false\nserver-port=25567\n' > run/gameTestServer/server.properties
+
       - name: Run required GameTests
         shell: bash
         run: |
@@ -36,17 +42,27 @@ jobs:
 
           cat gametest.log
 
-          if ! grep -Eq 'All 3 required tests passed :\)' gametest.log; then
+          if ! grep -Fq 'Registered AntiFullbright GameTests' gametest.log; then
+            echo 'AntiFullbright GameTest registration marker was not found.'
+            exit 1
+          fi
+
+          if ! grep -Fq '3 tests are now running' gametest.log; then
+            echo 'The expected three GameTests were not started.'
+            exit 1
+          fi
+
+          if ! grep -Fq 'All 3 required tests passed :)' gametest.log; then
             echo 'Required GameTest success summary was not found.'
             exit 1
           fi
 
-          if grep -Eq '[1-9][0-9]* required test(s)? failed|required tests failed :\(' gametest.log; then
-            echo 'GameTest reported a required test failure.'
+          if grep -Eq 'No test functions were given|Missing test structure|[1-9][0-9]* required test(s)? failed|required tests failed :\(|Game test server crashed' gametest.log; then
+            echo 'GameTest log contains a registration, structure, or required-test failure.'
             exit 1
           fi
 
-          if [ "$status" -ne 0 ] && [ "$status" -ne 124 ] && [ "$status" -ne 143 ]; then
+          if [ "$status" -ne 0 ]; then
             echo "GameTest process ended with unexpected status $status."
             exit "$status"
           fi
