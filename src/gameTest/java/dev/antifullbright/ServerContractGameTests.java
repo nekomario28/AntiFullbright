@@ -156,41 +156,32 @@ public final class ServerContractGameTests {
 
     @GameTest(templateNamespace = AntiFullbright.MOD_ID, template = "dark_room", setupTicks = 40, timeoutTicks = 40)
     public static void nightVisionPlayerIsExcludedFromDarkMiningCount(GameTestHelper helper) {
-        DarkMiningManager manager = new DarkMiningManager();
-        ServerPlayer player = nightVisionPlayer(helper);
-        try {
-            positionInsideRoom(helper, player);
-            BlockPos target = helper.absolutePos(new BlockPos(2, 1, 0));
-            manager.onBreak(player, helper.getLevel(), target, Blocks.STONE.defaultBlockState());
-            List<String> status = status(manager, helper, player);
-            List<String> debug = debug(manager, helper, player);
-            boolean nightVisionReason = debug.stream().anyMatch(line ->
-                    line.contains("night vision effect") || line.contains("暗視効果"));
-            if (!containsCount(status, 0) || !nightVisionReason) {
-                helper.fail("Night Vision player was not excluded as expected: status=" + status + ", debug=" + debug);
-                return;
-            }
-            helper.succeed();
-        } finally {
-            manager.close();
-            player.discard();
-        }
+        assertExcluded(helper, nightVisionPlayer(helper), "night vision effect", "暗視効果", "Night Vision player");
     }
 
     @GameTest(templateNamespace = AntiFullbright.MOD_ID, template = "dark_room", setupTicks = 40, timeoutTicks = 40)
     public static void operatorIsExcludedFromDarkMiningCount(GameTestHelper helper) {
+        assertExcluded(helper, operatorPlayer(helper), "server operator", "サーバーOP", "Operator");
+    }
+
+    @GameTest(templateNamespace = AntiFullbright.MOD_ID, template = "dark_room", setupTicks = 40, timeoutTicks = 40)
+    public static void spectatorIsExcludedFromDarkMiningCount(GameTestHelper helper) {
+        assertExcluded(helper, spectatorPlayer(helper), "spectator mode", "スペクテイターモード", "Spectator");
+    }
+
+    private static void assertExcluded(
+            GameTestHelper helper, ServerPlayer player, String englishReason, String japaneseReason, String label) {
         DarkMiningManager manager = new DarkMiningManager();
-        ServerPlayer player = operatorPlayer(helper);
         try {
             positionInsideRoom(helper, player);
             BlockPos target = helper.absolutePos(new BlockPos(2, 1, 0));
             manager.onBreak(player, helper.getLevel(), target, Blocks.STONE.defaultBlockState());
             List<String> status = status(manager, helper, player);
             List<String> debug = debug(manager, helper, player);
-            boolean operatorReason = debug.stream().anyMatch(line ->
-                    line.contains("server operator") || line.contains("サーバーOP"));
-            if (!containsCount(status, 0) || !operatorReason) {
-                helper.fail("Operator was not excluded as expected: status=" + status + ", debug=" + debug);
+            boolean expectedReason = debug.stream().anyMatch(line ->
+                    line.contains(englishReason) || line.contains(japaneseReason));
+            if (!containsCount(status, 0) || !expectedReason) {
+                helper.fail(label + " was not excluded as expected: status=" + status + ", debug=" + debug);
                 return;
             }
             helper.succeed();
@@ -201,25 +192,30 @@ public final class ServerContractGameTests {
     }
 
     private static ServerPlayer nonExcludedPlayer(GameTestHelper helper) {
-        return testPlayer(helper, false, false);
+        return testPlayer(helper, false, false, false);
     }
 
     private static ServerPlayer nightVisionPlayer(GameTestHelper helper) {
-        return testPlayer(helper, true, false);
+        return testPlayer(helper, true, false, false);
     }
 
     private static ServerPlayer operatorPlayer(GameTestHelper helper) {
-        return testPlayer(helper, false, true);
+        return testPlayer(helper, false, true, false);
     }
 
-    private static ServerPlayer testPlayer(GameTestHelper helper, boolean nightVision, boolean operator) {
+    private static ServerPlayer spectatorPlayer(GameTestHelper helper) {
+        return testPlayer(helper, false, false, true);
+    }
+
+    private static ServerPlayer testPlayer(
+            GameTestHelper helper, boolean nightVision, boolean operator, boolean spectator) {
         return new ServerPlayer(
                 helper.getLevel().getServer(),
                 helper.getLevel(),
                 new GameProfile(UUID.randomUUID(), "af-gametest"),
                 ClientInformation.createDefault()) {
             @Override public boolean isCreative() { return false; }
-            @Override public boolean isSpectator() { return false; }
+            @Override public boolean isSpectator() { return spectator; }
             @Override public boolean hasPermissions(int level) { return operator && level >= 2; }
 
             @Override
