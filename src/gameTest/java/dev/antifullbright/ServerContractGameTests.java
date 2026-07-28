@@ -2,11 +2,12 @@ package dev.antifullbright;
 
 import com.mojang.authlib.GameProfile;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.LightLayer;
@@ -156,10 +157,9 @@ public final class ServerContractGameTests {
     @GameTest(templateNamespace = AntiFullbright.MOD_ID, template = "dark_room", setupTicks = 40, timeoutTicks = 40)
     public static void nightVisionPlayerIsExcludedFromDarkMiningCount(GameTestHelper helper) {
         DarkMiningManager manager = new DarkMiningManager();
-        ServerPlayer player = nonExcludedPlayer(helper);
+        ServerPlayer player = nightVisionPlayer(helper);
         try {
             positionInsideRoom(helper, player);
-            player.addEffect(new MobEffectInstance(MobEffects.NIGHT_VISION, 200));
             BlockPos target = helper.absolutePos(new BlockPos(2, 1, 0));
             manager.onBreak(player, helper.getLevel(), target, Blocks.STONE.defaultBlockState());
             List<String> status = status(manager, helper, player);
@@ -178,6 +178,14 @@ public final class ServerContractGameTests {
     }
 
     private static ServerPlayer nonExcludedPlayer(GameTestHelper helper) {
+        return testPlayer(helper, false);
+    }
+
+    private static ServerPlayer nightVisionPlayer(GameTestHelper helper) {
+        return testPlayer(helper, true);
+    }
+
+    private static ServerPlayer testPlayer(GameTestHelper helper, boolean nightVision) {
         return new ServerPlayer(
                 helper.getLevel().getServer(),
                 helper.getLevel(),
@@ -186,6 +194,11 @@ public final class ServerContractGameTests {
             @Override public boolean isCreative() { return false; }
             @Override public boolean isSpectator() { return false; }
             @Override public boolean hasPermissions(int level) { return false; }
+
+            @Override
+            public boolean hasEffect(Holder<MobEffect> effect) {
+                return (nightVision && effect.equals(MobEffects.NIGHT_VISION)) || super.hasEffect(effect);
+            }
         };
     }
 
