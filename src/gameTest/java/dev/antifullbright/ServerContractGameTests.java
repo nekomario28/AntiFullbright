@@ -55,7 +55,7 @@ public final class ServerContractGameTests {
         DarkMiningManager manager = new DarkMiningManager();
         ServerPlayer player = helper.makeMockServerPlayerInLevel();
         try {
-            player.setGameMode(GameType.SURVIVAL);
+            player.gameMode.changeGameModeForPlayer(GameType.SURVIVAL);
             if (player.isCreative() || player.isSpectator()) {
                 helper.fail("Mock ServerPlayer did not enter survival mode");
                 return;
