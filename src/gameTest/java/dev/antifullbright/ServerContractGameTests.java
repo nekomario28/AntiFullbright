@@ -12,9 +12,10 @@ import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 
+import java.util.List;
 import java.util.UUID;
 
-/** In-game regression coverage for datapack tags, commands, and a minimal dark-mining session. */
+/** In-game regression coverage for datapack tags, commands, and minimal dark-mining behavior. */
 @GameTestHolder(AntiFullbright.MOD_ID)
 @PrefixGameTestTemplate(false)
 public final class ServerContractGameTests {
@@ -57,30 +58,47 @@ public final class ServerContractGameTests {
         DarkMiningManager manager = new DarkMiningManager();
         ServerPlayer player = nonExcludedPlayer(helper);
         try {
-            BlockPos standing = helper.absolutePos(new BlockPos(2, 1, 2));
-            player.setPos(standing.getX() + 0.5D, standing.getY(), standing.getZ() + 0.5D);
-
+            positionInsideRoom(helper, player);
             BlockPos target = helper.absolutePos(new BlockPos(2, 1, 0));
-            var level = helper.getLevel();
-            BlockPos eyes = BlockPos.containing(player.getEyePosition());
-            int eyeBlockLight = level.getBrightness(LightLayer.BLOCK, eyes);
-            int eyeSkyLight = level.getBrightness(LightLayer.SKY, eyes);
-            int targetBlockLight = level.getBrightness(LightLayer.BLOCK, target);
-            int targetSkyLight = level.getBrightness(LightLayer.SKY, target);
-            if (eyeBlockLight != 0 || eyeSkyLight != 0 || targetBlockLight != 0 || targetSkyLight != 0) {
-                helper.fail("Dark-room fixture was not fully dark: eyes="
-                        + eyeBlockLight + "/" + eyeSkyLight
-                        + ", target=" + targetBlockLight + "/" + targetSkyLight);
+            assertFullyDark(helper, player, target);
+
+            manager.onBreak(player, helper.getLevel(), target, Blocks.STONE.defaultBlockState());
+            List<String> status = status(manager, helper, player);
+            if (!containsCount(status, 1)) {
+                helper.fail("A qualifying non-excluded break did not start a one-block counted session: "
+                        + manager.debugLines(helper.getLevel().getServer(), player));
                 return;
             }
 
-            manager.onBreak(player, level, target, Blocks.STONE.defaultBlockState());
-            boolean counted = manager.statusLines(level.getServer(), player).stream()
+            helper.succeed();
+        } finally {
+            manager.close();
+            player.discard();
+        }
+    }
+
+    @SuppressWarnings("removal")
+    @GameTest(
+            templateNamespace = AntiFullbright.MOD_ID,
+            template = "dark_room",
+            setupTicks = 40,
+            timeoutTicks = 40)
+    public static void creativePlayerIsExcludedFromDarkMiningCount(GameTestHelper helper) {
+        DarkMiningManager manager = new DarkMiningManager();
+        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        try {
+            positionInsideRoom(helper, player);
+            BlockPos target = helper.absolutePos(new BlockPos(2, 1, 0));
+            manager.onBreak(player, helper.getLevel(), target, Blocks.STONE.defaultBlockState());
+
+            List<String> status = status(manager, helper, player);
+            List<String> debug = manager.debugLines(helper.getLevel().getServer(), player).stream()
                     .map(component -> component.getString())
-                    .anyMatch(line -> line.contains("countedBlocks=1") || line.contains("対象破壊数=1"));
-            if (!counted) {
-                helper.fail("A qualifying non-excluded break did not start a one-block counted session: "
-                        + manager.debugLines(level.getServer(), player));
+                    .toList();
+            boolean creativeReason = debug.stream().anyMatch(line ->
+                    line.contains("creative mode") || line.contains("クリエイティブモード"));
+            if (!containsCount(status, 0) || !creativeReason) {
+                helper.fail("Creative player was not excluded as expected: status=" + status + ", debug=" + debug);
                 return;
             }
 
@@ -112,5 +130,35 @@ public final class ServerContractGameTests {
                 return false;
             }
         };
+    }
+
+    private static void positionInsideRoom(GameTestHelper helper, ServerPlayer player) {
+        BlockPos standing = helper.absolutePos(new BlockPos(2, 1, 2));
+        player.setPos(standing.getX() + 0.5D, standing.getY(), standing.getZ() + 0.5D);
+    }
+
+    private static void assertFullyDark(GameTestHelper helper, ServerPlayer player, BlockPos target) {
+        var level = helper.getLevel();
+        BlockPos eyes = BlockPos.containing(player.getEyePosition());
+        int eyeBlockLight = level.getBrightness(LightLayer.BLOCK, eyes);
+        int eyeSkyLight = level.getBrightness(LightLayer.SKY, eyes);
+        int targetBlockLight = level.getBrightness(LightLayer.BLOCK, target);
+        int targetSkyLight = level.getBrightness(LightLayer.SKY, target);
+        if (eyeBlockLight != 0 || eyeSkyLight != 0 || targetBlockLight != 0 || targetSkyLight != 0) {
+            helper.fail("Dark-room fixture was not fully dark: eyes="
+                    + eyeBlockLight + "/" + eyeSkyLight
+                    + ", target=" + targetBlockLight + "/" + targetSkyLight);
+        }
+    }
+
+    private static List<String> status(DarkMiningManager manager, GameTestHelper helper, ServerPlayer player) {
+        return manager.statusLines(helper.getLevel().getServer(), player).stream()
+                .map(component -> component.getString())
+                .toList();
+    }
+
+    private static boolean containsCount(List<String> status, int count) {
+        return status.stream().anyMatch(line ->
+                line.contains("countedBlocks=" + count) || line.contains("対象破壊数=" + count));
     }
 }
