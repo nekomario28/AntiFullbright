@@ -1,15 +1,18 @@
 package dev.antifullbright;
 
+import com.mojang.authlib.GameProfile;
 import net.minecraft.core.BlockPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
+import net.minecraft.server.level.ClientInformation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.Blocks;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+
+import java.util.UUID;
 
 /** In-game regression coverage for datapack tags, commands, and a minimal dark-mining session. */
 @GameTestHolder(AntiFullbright.MOD_ID)
@@ -45,7 +48,6 @@ public final class ServerContractGameTests {
         helper.succeed();
     }
 
-    @SuppressWarnings("removal")
     @GameTest(
             templateNamespace = AntiFullbright.MOD_ID,
             template = "dark_room",
@@ -53,14 +55,8 @@ public final class ServerContractGameTests {
             timeoutTicks = 40)
     public static void survivalBreakInCompleteDarknessStartsCountedSession(GameTestHelper helper) {
         DarkMiningManager manager = new DarkMiningManager();
-        ServerPlayer player = helper.makeMockServerPlayerInLevel();
+        ServerPlayer player = nonExcludedPlayer(helper);
         try {
-            player.gameMode.changeGameModeForPlayer(GameType.SURVIVAL);
-            if (player.isCreative() || player.isSpectator()) {
-                helper.fail("Mock ServerPlayer did not enter survival mode");
-                return;
-            }
-
             BlockPos standing = helper.absolutePos(new BlockPos(2, 1, 2));
             player.setPos(standing.getX() + 0.5D, standing.getY(), standing.getZ() + 0.5D);
 
@@ -83,7 +79,7 @@ public final class ServerContractGameTests {
                     .map(component -> component.getString())
                     .anyMatch(line -> line.contains("countedBlocks=1") || line.contains("対象破壊数=1"));
             if (!counted) {
-                helper.fail("A qualifying survival break did not start a one-block counted session: "
+                helper.fail("A qualifying non-excluded break did not start a one-block counted session: "
                         + manager.debugLines(level.getServer(), player));
                 return;
             }
@@ -93,5 +89,28 @@ public final class ServerContractGameTests {
             manager.close();
             player.discard();
         }
+    }
+
+    private static ServerPlayer nonExcludedPlayer(GameTestHelper helper) {
+        return new ServerPlayer(
+                helper.getLevel().getServer(),
+                helper.getLevel(),
+                new GameProfile(UUID.randomUUID(), "af-gametest"),
+                ClientInformation.createDefault()) {
+            @Override
+            public boolean isCreative() {
+                return false;
+            }
+
+            @Override
+            public boolean isSpectator() {
+                return false;
+            }
+
+            @Override
+            public boolean hasPermissions(int level) {
+                return false;
+            }
+        };
     }
 }
