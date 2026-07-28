@@ -19,7 +19,8 @@ public final class AntiFullbright {
     private static final String ENABLE_GAMETESTS_PROPERTY = "antifullbright.enableGameTests";
     private static final List<String> GAMETEST_CLASSES = List.of(
             "dev.antifullbright.ServerContractGameTests",
-            "dev.antifullbright.AdvancedDarkMiningGameTests");
+            "dev.antifullbright.AdvancedDarkMiningGameTests",
+            "dev.antifullbright.PlacementCapacityGameTests");
 
     public AntiFullbright(IEventBus modBus, ModContainer container) {
         container.registerConfig(ModConfig.Type.SERVER, AntiFullbrightConfig.SPEC);
