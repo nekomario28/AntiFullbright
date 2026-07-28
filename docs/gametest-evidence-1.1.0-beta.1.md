@@ -5,127 +5,134 @@
 - Repository: `nekomario28/AntiFullbright`
 - Pull request: `#1`
 - Branch: `agent/client-content-scanner`
-- Audited implementation head: `bad7a6533921b0fd572865f55b11fa73b97549f9`
+- Audited GameTest implementation head: `98f47cafff513aaa68489cafd0020f41659b0f1e`
 - Base: `main@b39b39e6f7886216d2bf5db9393eec71fccb1871`
 - Candidate version: `1.1.0-beta.1`
 - PR state: Draft
 - Merge authorization: none
 - Stable release authorization: none
 
-This record covers the first isolated NeoForge GameTest phase. It does not claim full behavioral coverage of dark-mining detection.
+This record covers isolated NeoForge GameTests for server contracts and deterministic dark-mining behavior. It does not claim complete warning, persistence, or time-threshold coverage.
 
 ## GameTest workflow
 
-- GitHub Actions run: `30340650023`
-- Head SHA: `bad7a6533921b0fd572865f55b11fa73b97549f9`
+- GitHub Actions run: `30344683179`
+- Head SHA: `98f47cafff513aaa68489cafd0020f41659b0f1e`
 - Result: success
 - Artifact: `gametest-log`
-- Artifact ID: `8680904958`
-- Artifact digest: `sha256:12f7543f0c2218872f8462fad9556835401efcf95e683ab3601b3b776f33e202`
+- Artifact ID: `8682435847`
+- Artifact digest: `sha256:ff20efd48b7180c1c8bbc9bad08415edcd857f23da7e7c8773f3b3b2cfc2a7fa`
 
 Required markers in the saved log:
 
 ```text
 Enabled Gametest Namespaces: [antifullbright]
 Registered AntiFullbright GameTests
-3 tests are now running
-3 GAME TESTS COMPLETE
-All 3 required tests passed :)
+11 tests are now running
+11 GAME TESTS COMPLETE
+All 11 required tests passed :)
 Game test server shutting down
 BUILD SUCCESSFUL
 ```
 
-The three tests completed in approximately 0.5 seconds after the GameTest server reached readiness.
-
 ## Executed tests
 
-### Counted-block tag
+### Data-pack and command contracts
 
-Verifies that `minecraft:stone` is present in:
+1. `minecraft:stone` is present in `antifullbright:dark_mining_counted_blocks`.
+2. `minecraft:torch` is present in `antifullbright:dark_mining_light_sources`.
+3. The running server command dispatcher contains the `/darkmining` root command.
 
-```text
-antifullbright:dark_mining_counted_blocks
-```
+### Minimal dark-mining behavior
 
-This proves the built-in block tag was loaded into the GameTest server registry.
+4. A non-excluded player breaking stone in complete darkness starts a session with `countedBlocks=1`.
+5. A creative player remains at `countedBlocks=0`, and the debug result identifies creative mode as the exclusion reason.
+6. A player-placed stone is excluded on the first break; the same position is counted on the next break, proving that the placement exclusion is consumed once rather than becoming permanent.
+7. Placing a tagged, light-emitting torch resets an established one-block dark-mining session to zero.
+8. Holding a tagged torch during the first qualifying break leaves the count at zero and starts a positive light-holding grace period.
+9. A deterministic Night Vision fixture remains at zero and reports Night Vision as the exclusion reason.
+10. A deterministic permission-level-two operator fixture remains at zero and reports server operator as the exclusion reason.
+11. A deterministic spectator fixture remains at zero and reports spectator mode as the exclusion reason.
 
-### Light-source item tag
+The tests query production status and debug output rather than reproducing the detector's session counters inside the test code.
 
-Verifies that `minecraft:torch` is present in:
+## Test-only structures
 
-```text
-antifullbright:dark_mining_light_sources
-```
-
-This proves the built-in item tag was loaded into the GameTest server registry.
-
-### Administrator command registration
-
-Verifies that the root command dispatcher contains:
-
-```text
-darkmining
-```
-
-This proves `/darkmining` was registered in the running GameTest server.
-
-## Isolated structure template
-
-The tests use the test-only structure:
+The GameTest source set contains two structures:
 
 ```text
 src/gameTest/resources/data/antifullbright/structure/empty.nbt
+src/gameTest/resources/data/antifullbright/structure/dark_room.nbt
 ```
 
-Properties:
+### `antifullbright:empty`
 
-- namespace: `antifullbright`
-- template ID: `antifullbright:empty`
 - dimensions: `1 x 1 x 1`
-- Minecraft data version: `3955` for Minecraft `1.21.1`
+- Minecraft data version: `3955`
 - compressed NBT SHA-256: `73422112d58c01d2493dc6ceb1ad6e527ac877965d599aff7254f3bc376297ae`
 
-The GameTest run enables only the `antifullbright` test namespace. It does not depend on a presumed `minecraft:empty` template or enable unrelated test namespaces.
+### `antifullbright:dark_room`
+
+- dimensions: `5 x 5 x 5`
+- stone outer shell with an air interior
+- Minecraft data version: `3955`
+- compressed NBT SHA-256: `32e69f310fedda9dc2b8de77e64275efcd9ebd7f5314fe5abe4dbcf7f6974d73`
+
+The behavior tests directly verify that both the player's eye position and the target block have block light `0` and sky light `0` before using the room as a darkness fixture.
+
+The GameTest run enables only the `antifullbright` test namespace. It does not depend on a presumed `minecraft:empty` structure or enable unrelated test namespaces.
+
+## Deterministic player fixtures
+
+NeoForge's standard GameTest mock player is creative and has no network connection. It is used only for the creative exclusion test.
+
+Other tests use test-only `ServerPlayer` subclasses that explicitly control the predicates consumed by production code:
+
+- `isCreative()`
+- `isSpectator()`
+- permission level checks
+- Night Vision presence
+
+These fixtures avoid modifying global server configuration and avoid sending packets through a nonexistent test connection. They remain under `src/gameTest` and are not packaged.
 
 ## Test-source isolation
 
-The test Java source and structure are located under `src/gameTest` and are not included in the production beta JAR.
-
-The Packaged Server workflow checks the generated JAR entry list and fails if it contains any of:
+The Packaged Server workflow lists the generated JAR entries and fails if it contains any of:
 
 ```text
 ServerContractGameTests
 src/gameTest
-data/antifullbright/structure/empty.nbt
+data/antifullbright/structure/
 ```
 
-The isolation check passed.
+The isolation check passed at the audited implementation head. The normal packaged server also fails if GameTest registration is unexpectedly activated.
 
 ## Packaged production verification
 
-- GitHub Actions run: `30340650097`
+- GitHub Actions run: `30344683160`
+- Head SHA: `98f47cafff513aaa68489cafd0020f41659b0f1e`
 - Result: success
 - Artifact: `packaged-server-evidence`
-- Artifact ID: `8680923779`
-- Artifact digest: `sha256:cc6f86e051e61441c29cc2a2d077e270ec41759cd162b9c4d11fdc55ffd08bf8`
+- Artifact ID: `8682446145`
+- Artifact digest: `sha256:15378b938e70fe0a56336b70c202b83ef4d7f71f786b16bf78bb1dbfaffd23d5`
 - Generated JAR SHA-256: `bcbd81780e9212c66e4f6b8e2c95b480cb06267708ad32281ee9f6331b5efc0b`
 - Verified NeoForge installer SHA-256: `58edd322dc3cbbcd5c75d9a44f93d01211fda2953665483077ddd41fbecf942c`
 
-The generated JAR was installed into a fresh official NeoForge `21.1.235` server. The server reached both AntiFullbright and Minecraft readiness markers.
-
-The packaged-server gate also fails if the normal server log contains:
+The generated JAR was installed into a fresh official NeoForge `21.1.235` server. Required runtime markers were present:
 
 ```text
-Registered AntiFullbright GameTests
+Anti Fullbright 1.1.0-beta.1 (antifullbright)
+AntiFullbright dark-mining detection is ready
+Done (5.230s)! For help, type "help"
 ```
 
-No such marker was present. GameTest registration remained disabled in the normal packaged server.
+`Registered AntiFullbright GameTests` was absent from the normal packaged-server log.
 
 ## Regression verification
 
 The general Build workflow also passed at the same head:
 
-- GitHub Actions run: `30340650027`
+- GitHub Actions run: `30344683208`
 - JUnit and full Gradle build: success
 - development dedicated server: success
 - physical client clean startup: success
@@ -136,37 +143,40 @@ Relevant artifacts:
 
 | Artifact | ID | Digest |
 | --- | ---: | --- |
-| `antifullbright` | `8680902561` | `sha256:3df07159c7ecc0d79d3ef2023d6184a669bfc80b7b18cfdb5ee8d55a5d380d86` |
-| `gradle-build-log` | `8680902220` | `sha256:f667456a2b0c70a9d58c9cbd303221bc4e63b5d07c44834c10f1f5a1426f170b` |
-| `dedicated-server-smoke-log` | `8680923496` | `sha256:db0b00b74e3cf07e6426b3f81cddd04b4e8495e8071aa957433f99da428ad5a7` |
-| `physical-client-resourcepack-mutation-log` | `8680938953` | `sha256:363113ecc879651f855b9a9d3e7c31c8278881bfb670d18f073b8959452f18d2` |
-| `physical-client-startup-block-log` | `8680949718` | `sha256:7e0c0e1239682048adca30cae93d273d359048d4458385e9b9aba79ea26d16fb` |
+| `antifullbright` | `8682424878` | `sha256:fc07c12c1f1bf1fac15e96d5134b72b2d5cc7f85d236cdab0cce0433e6cd09e6` |
+| `gradle-build-log` | `8682424546` | `sha256:ce5e01676d02fb9ace90ab953d864072a165a5f4d2e263c4962a64b5d78bf336` |
+| `dedicated-server-smoke-log` | `8682450467` | `sha256:b9a655625c61ad9874d9d6790365767df7bf8f930931f7bc3c2a823355b54b44` |
+| `physical-client-resourcepack-mutation-log` | `8682468263` | `sha256:a90b08b536ec1250629f779c734b8fbac5847fec70ced8fadd24752555a097eb` |
+| `physical-client-startup-block-log` | `8682480440` | `sha256:71fd57a248fd413321366aaff587bcbf7df3c3c1f7d85e3815fd174b989c91dc` |
 
 ## What this phase proves
 
-This phase proves that, on NeoForge `21.1.235` and Minecraft `1.21.1`:
+On NeoForge `21.1.235` and Minecraft `1.21.1`, this phase proves that:
 
-- the isolated GameTest source set compiles;
-- the test registration bridge is active only when the GameTest system property is enabled;
-- exactly three required server-contract tests start and pass;
-- the built-in tags and command registration are available in a real GameTest server;
-- the test-only structure loads correctly;
-- test-only Java and NBT assets do not leak into the release JAR;
+- the isolated GameTest source set compiles and registers only when its explicit test property is enabled;
+- exactly eleven required tests start and pass;
+- built-in tags and command registration are available in a real GameTest server;
+- a qualifying dark break starts a production session;
+- creative, spectator, Night Vision, and operator exclusion branches produce zero count and the expected reason;
+- player-placed block exclusion is single-use;
+- torch placement resets an active session;
+- held-torch grace starts without incrementing the count;
+- test-only Java and structure assets do not leak into the release JAR;
 - normal packaged-server startup does not activate GameTests;
-- existing client scanner and server startup gates still pass.
+- existing client scanner and server startup gates remain successful.
 
-## Remaining GameTest coverage
+## Remaining deterministic coverage gate
 
-The following production behavior is not yet covered by GameTest:
+The following behavior is not yet covered because it depends on real time, mutable global configuration, persistent server state, or more complex event fixtures:
 
-- continuous dark-mining duration accumulation;
-- counted block threshold behavior;
-- warning issuance and warning-level progression;
-- light, inactivity, death, logout, dimension-change, and teleport resets;
-- Night Vision, underwater, operator, creative, spectator, and FakePlayer exclusions;
-- torch-holding grace-period expiration;
-- player-placed block exclusion and expiration;
-- SavedData persistence and warning decay;
-- `/darkmining reload`, status, reset, setwarning, and debug command semantics.
+- continuous duration and minimum-block warning thresholds;
+- warning issuance, kick progression, and warning decay;
+- grace-period expiration after elapsed real time;
+- inactivity, death, logout, dimension-change, and teleport event wiring;
+- underwater and FakePlayer exclusions;
+- player-placed block expiration and maximum-entry eviction;
+- SavedData persistence across an actual server restart;
+- `/darkmining reload`, status, reset, setwarning, and debug command semantics;
+- localization assertions under both configured languages.
 
-Further GameTests should be added only after exposing a deterministic test seam or fixture that does not duplicate the production detector logic inside the tests.
+Further expansion should first introduce a deterministic clock/configuration seam or dedicated persistence fixture. It should not mutate shared global configuration concurrently or duplicate the production detector algorithm inside tests.
