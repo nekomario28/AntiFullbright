@@ -28,6 +28,24 @@ jobs:
       - name: Build beta JAR
         run: ./gradlew clean build --no-daemon
 
+      - name: Verify GameTest isolation from beta JAR
+        shell: bash
+        run: |
+          jar_file="$(find build/libs -maxdepth 1 -type f -name 'antifullbright-*.jar' -print -quit)"
+          if [ -z "$jar_file" ]; then
+            echo 'Expected AntiFullbright JAR was not found.'
+            exit 1
+          fi
+
+          jar tf "$jar_file" > packaged-jar-entries.txt
+          if grep -Eq 'ServerContractGameTests|src/gameTest|data/antifullbright/structure/empty\.nbt' packaged-jar-entries.txt; then
+            echo 'GameTest-only code or resources leaked into the beta JAR.'
+            cat packaged-jar-entries.txt
+            exit 1
+          fi
+
+          echo "GameTest isolation verified for $jar_file"
+
       - name: Install official NeoForge and run packaged JAR
         shell: bash
         run: |
@@ -47,5 +65,6 @@ jobs:
             packaged-server-install.log
             packaged-server.log
             packaged-server-mod.sha256
+            packaged-jar-entries.txt
           if-no-files-found: warn
           retention-days: 14
