@@ -30,7 +30,7 @@ runs {
         argument '--nogui'
     }
     gameTestServer {
-        systemProperty 'neoforge.enabledGameTestNamespaces', mod_id
+        systemProperty 'neoforge.enabledGameTestNamespaces', 'minecraft'
         systemProperty 'antifullbright.enableGameTests', 'true'
         modSource project.sourceSets.gameTest
     }
