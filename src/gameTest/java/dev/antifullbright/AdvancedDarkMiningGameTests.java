@@ -287,8 +287,8 @@ public final class AdvancedDarkMiningGameTests {
             @Override public boolean isCreative() { return false; }
             @Override public boolean isSpectator() { return false; }
             @Override public boolean hasPermissions(int level) { return false; }
-            @Override public FluidType getEyeInFluidType() {
-                return underwater ? NeoForgeMod.WATER_TYPE.value() : super.getEyeInFluidType();
+            @Override public boolean isEyeInFluidType(FluidType type) {
+                return (underwater && type == NeoForgeMod.WATER_TYPE.value()) || super.isEyeInFluidType(type);
             }
             @Override public void sendSystemMessage(Component message) {}
             @Override public void displayClientMessage(Component message, boolean actionBar) {}
