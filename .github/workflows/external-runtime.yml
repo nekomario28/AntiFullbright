@@ -21,6 +21,12 @@ jobs:
           java-version: '21'
           cache: gradle
 
+      - name: Cache external launcher profile
+        uses: actions/cache@v4
+        with:
+          path: packaged-client-profile/main
+          key: portablemc-neoforge-1.21.1-21.1.235-v1
+
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
@@ -48,7 +54,9 @@ jobs:
           name: launcher-client-evidence
           path: |
             launcher-client-clean.log
+            launcher-client-clean-game.log
             launcher-client-startup-block.log
+            launcher-client-startup-block-game.log
             launcher-client-mod.sha256
           if-no-files-found: warn
           retention-days: 14
