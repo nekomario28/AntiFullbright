@@ -1,158 +1,163 @@
-# Client Scanner Evidence — 1.1.0-beta.1
+# Client Scanner Evidence — AntiFullbright 1.1.0-beta.1
 
 ## Status
 
 - Repository: `nekomario28/AntiFullbright`
 - Pull request: `#1`
 - Branch: `agent/client-content-scanner`
-- Exact evidence head: `6efbe397a560053e53dabb30cfabab9dfe546cec`
+- Tested implementation head: `1bf1fce7f7078817546d6deb7efdc39703c71ee4`
 - Base: `main@b39b39e6f7886216d2bf5db9393eec71fccb1871`
 - Candidate version: `1.1.0-beta.1`
-- PR state at evidence capture: Draft
+- Minecraft: `1.21.1`
+- NeoForge: `21.1.235`
+- Java: `21`
+- PR state: Draft
 - Merge authorization: none
 - Stable release authorization: none
 
-This document records evidence for the beta implementation. It does not claim tamper-proof client attestation and does not authorize a merge or stable release.
+This document records beta implementation evidence. It does not claim tamper-proof client attestation and does not authorize merge or stable release.
 
-## Automated build and runtime evidence
+## Exact-head workflow summary
 
-### Build workflow
+All required workflows passed at `1bf1fce7f7078817546d6deb7efdc39703c71ee4`:
 
-GitHub Actions run: `30290859638`
-
-The run completed successfully at exact head `6efbe397a560053e53dabb30cfabab9dfe546cec` and covered:
-
-- Java 21 setup
-- Gradle wrapper validation
-- production compilation
-- test compilation
-- JUnit execution
-- full Gradle `build`
-- development dedicated-server startup
-- physical client startup under Xvfb and software rendering
-- runtime resource-pack mutation and WatchService rescan
-- physical client startup blocking with a prohibited pack already present
-
-Artifacts:
-
-| Artifact | Artifact ID | Artifact digest |
+| Workflow | Run | Result |
 | --- | ---: | --- |
-| `antifullbright` | `8662724516` | `sha256:e6f92cc529087881baf8c0da09bca25cb083f2c795423931053936a98a0973f9` |
-| `gradle-build-log` | `8662724189` | `sha256:c70cbcc8c5672adf1f225723ecb6e45a0cca992762dfd7647a98bfced307f6b4` |
-| `dedicated-server-smoke-log` | `8662749046` | `sha256:3225508847a5cfd178965db271167c355f3dbe51adb6e57b1470adb858db6436` |
-| `physical-client-resourcepack-mutation-log` | `8662764503` | `sha256:cf7755fba29c8b0f9b37fc8aeeb4514fa1a1a1a58c16c79c0373e680c5d43366` |
-| `physical-client-startup-block-log` | `8662776118` | `sha256:5bcbc96a8a0280812792c0f841285cc32468dc70e90e1144d476b26b4c1c8cb8` |
+| Build | `30488049987` | success |
+| GameTest | `30488049916` | success |
+| Packaged Server | `30488049932` | success |
+| External Runtime | `30488049969` | success |
 
-### Packaged-server workflow
+## External launcher-managed client profile
 
-GitHub Actions run: `30290859522`
+The `External Runtime` workflow creates an isolated client profile through PortableMC rather than invoking NeoGradle `runClient`. PortableMC resolves the normal Minecraft `1.21.1` and NeoForge `21.1.235` launcher metadata and libraries, places the generated AntiFullbright JAR into the profile's ordinary `mods` directory, and launches the `forgeclient` target with the profile's ordinary game directory.
 
-The separate packaged-server gate completed successfully at the same exact head. It:
+This is automated evidence for a launcher-managed profile outside the development run configuration. It is not a claim that the official Mojang Launcher graphical interface itself was manually clicked.
 
-1. built `antifullbright-1.1.0-beta.1.jar`;
-2. downloaded the official NeoForge `21.1.235` installer;
-3. verified the installer against the Maven-hosted SHA-256 file;
-4. installed a fresh NeoForge server outside the development run directory;
-5. copied only the generated AntiFullbright JAR into its `mods` directory;
-6. started the packaged server and required the Minecraft and AntiFullbright readiness markers.
+- GitHub Actions run: `30488049969`
+- Job: `launcher-client`
+- Result: success
+- Artifact: `launcher-client-evidence`
+- Artifact ID: `8738538318`
+- Artifact digest: `sha256:86dbeb392a1a5d897cc8464a4fd6dc552627093e0917f885f9a20ffa53828c47`
+- Generated AntiFullbright JAR SHA-256: `bdfd1cd6eb07204d599df4d8bc09132ceaccffcac6028d0a2fd6ee944ecc7ff1`
 
-Evidence values:
+The artifact contains:
 
+```text
+launcher-client-clean.log
+launcher-client-clean-game.log
+launcher-client-startup-block.log
+launcher-client-startup-block-game.log
+launcher-client-mod.sha256
+```
+
+### Clean launch result
+
+The isolated profile reached the real client render thread and produced all required markers:
+
+```text
+PortableMC external profile: Minecraft 1.21.1, NeoForge 21.1.235
+Backend library: LWJGL version 3.3.3+5
+Client content scan completed: No findings (mods=0, resourcePacks=0).
+Watching resource packs for changes: .../resourcepacks
+```
+
+The scanner reports zero scanned mods because the running AntiFullbright archive is deliberately excluded from scanning itself. The first external attempt exposed that code-source-only exclusion was not sufficient under NeoForge's transformed launcher environment: the JAR filename contains `fullbright` and produced a warning against itself. The implementation now resolves its archive through NeoForge `ModList` and keeps code-source lookup as a fallback. The corrected exact head produced a clean result.
+
+### Startup blocking result
+
+After the clean process was terminated, CI created this pack in the same isolated profile before starting a new client process:
+
+```text
+resourcepacks/ci-prohibited-lightmap.zip
+└── assets/minecraft/optifine/lightmap/world0.png
+```
+
+The second process identified the exact configured blocking path and aborted client setup:
+
+```text
+AntiFullbright blocked client setup. Content scan findings (blocks=1, warnings=0):
+BLOCK resourcepack: .../ci-prohibited-lightmap.zip [blocked_pack_path] Matched: assets/minecraft/optifine/lightmap/
+```
+
+This proves that the generated JAR, when installed in an independently created launcher-managed NeoForge profile, supports both a clean launch and blocking of a prohibited resource pack already present before startup.
+
+## Development physical-client regression gates
+
+Build run `30488049987` passed at the same tested implementation head and retained the NeoGradle physical-client gates:
+
+- clean Xvfb/software-rendered client startup;
+- recursive resource-pack watcher startup;
+- prohibited resource-pack creation after startup;
+- WatchService rescan and runtime blocking through the normal Minecraft disconnect/screen path;
+- a separate startup-block process with the prohibited resource pack already present;
+- no direct `System.exit` path.
+
+Relevant artifacts:
+
+| Artifact | ID | Digest |
+| --- | ---: | --- |
+| `physical-client-resourcepack-mutation-log` | `8738540378` | `sha256:7e5cf65530c8ca82e839de6dcaba3060d2a12158a8b9fcf8a4dc08179076a0bf` |
+| `physical-client-startup-block-log` | `8738551427` | `sha256:ce0909692c99b31aa739303aad4510ac6702f0b56d5208b502d12e17c3cdca29` |
+
+## Packaged-server class separation
+
+- Packaged Server run: `30488049932`
+- Result: success
+- Artifact: `packaged-server-evidence`
+- Artifact ID: `8738533866`
+- Artifact digest: `sha256:0c341ae4c804d145d0227d9a367abad2dff29372aab2f36f7d90f5530269b5c2`
 - Verified NeoForge installer SHA-256: `58edd322dc3cbbcd5c75d9a44f93d01211fda2953665483077ddd41fbecf942c`
-- Generated AntiFullbright JAR SHA-256: `ca140594dce51ac2f6bad2eeae8354c7864ac6b8ee6cbeebd5b4383f18da7ce4`
-- Packaged-server artifact ID: `8662744224`
-- Packaged-server artifact digest: `sha256:c54c984ec723f8d9b0a31e245794cf98974f2f56f8a5487dd7900959eae3045e`
+- Generated AntiFullbright JAR SHA-256: `bdfd1cd6eb07204d599df4d8bc09132ceaccffcac6028d0a2fd6ee944ecc7ff1`
 
-Required runtime markers were present:
+A fresh official NeoForge dedicated server started with only the generated JAR in `mods`. The common/server entrypoint did not load client-only classes, and GameTest-only classes/resources were absent from the production JAR.
 
-```text
-Anti Fullbright 1.1.0-beta.1 (antifullbright)
-AntiFullbright dark-mining detection is ready
-Done (9.123s)! For help, type "help"
-```
+## Verified scanner behavior
 
-## Verified behavior
+The implementation and automated suite verify:
 
-### Clean client startup
-
-The physical client reached LWJGL initialization, reported a clean client content scan, and started recursive resource-pack watching. The fixture contained no mods or resource packs at initial scan time.
-
-### Runtime resource-pack mutation
-
-After the clean startup and watcher-ready markers, CI created:
-
-```text
-run/client/resourcepacks/ci-prohibited-lightmap.zip
-```
-
-The ZIP contained:
-
-```text
-assets/minecraft/optifine/lightmap/world0.png
-```
-
-The client then emitted both required markers:
-
-```text
-Resource-pack rescan completed with blocking findings:
-AntiFullbright blocked local content while the client was running.
-```
-
-This verifies the requested create/change detection path, full rescan, prohibited-path classification, and safe runtime blocking path without `System.exit`.
-
-### Startup blocking
-
-The same prohibited resource pack remained in place for a new physical-client process. Client setup produced the exact blocking rule `blocked_pack_path` and did not reach a clean startup result.
-
-### Resource-pack root recreation and overflow recovery
-
-A WatchService regression test deletes the entire watched `resourcepacks` directory, recreates it, and then writes a new file inside it. The parent-directory recovery watch re-registers the recreated root and observes the nested change. An `OVERFLOW` event also re-registers the current root before the full rescan, preventing a lost recreation event from leaving the watcher detached.
-
-### Dedicated-server class separation
-
-Both the development server and fresh packaged server started without client-class loading failures. The common entrypoint does not directly reference the client scanner entrypoint.
-
-## Unit-test coverage
-
-The current JUnit suite verifies:
-
-- exact NeoForge/Forge `[[mods]]` Mod ID produces `BLOCK`;
-- a blocked Mod ID used only in `[[dependencies.*]]` does not replace the declared Mod ID;
-- exact Fabric root `id` produces `BLOCK`;
-- a nested Fabric custom `id` does not replace the root Mod ID;
-- exact Quilt `quilt_loader.id` produces `BLOCK`;
-- a harmless description containing `fullbright` produces `WARNING` rather than `BLOCK`;
-- prohibited lightmap path produces `BLOCK`;
-- only the exact running AntiFullbright archive path is ignored;
-- malformed archives differ correctly between fail-open and fail-closed policies;
-- deletion and recreation of the watched resource-pack root restores nested change notifications.
+- bounded read-only scanning of ordinary `mods` and `resourcepacks` locations;
+- exact NeoForge/Forge `[[mods]]` Mod ID blocking;
+- exact Fabric root `id` blocking;
+- exact Quilt `quilt_loader.id` blocking;
+- dependency or nested custom IDs are not mistaken for the declared Mod ID;
+- configured SHA-256 values can block exact archives;
+- configured prohibited resource-pack paths block ZIP or unpacked packs;
+- ambiguous filename, archive-path, and metadata token matches remain warnings rather than automatic blocks;
+- malformed archives follow the configured fail-open/fail-closed policy;
+- the running AntiFullbright JAR is excluded using NeoForge's loaded-mod file path, with code-source fallback;
+- resource-pack monitoring is recursive and debounced;
+- deletion/recreation of the resource-pack root is recovered;
+- WatchService `OVERFLOW` re-registers the root and performs a full rescan;
+- runtime findings are handled on the Minecraft main thread through the normal disconnect/screen route;
+- no direct process termination is used.
 
 ## Policy and privacy review
 
-The beta policy remains client-local and user-editable. It is not represented as a server-enforced policy because no handshake or attestation exists.
+The beta scanner remains client-local and user-editable. It is not represented as server-enforced because there is no handshake or attestation protocol.
 
-The current implementation contains no client payload that transmits scanned contents, filenames, paths, hashes, or classification results. Findings remain in local logs and the blocking screen. Because local paths can appear in logs or crash reports, the README now instructs users to review and redact private path components before sharing evidence.
+The scanner does not transmit scanned filenames, paths, hashes, or classification results. Findings remain in the local log and blocking screen. Local absolute paths can therefore appear in logs or crash reports; users should redact private path components before sharing them.
 
-The default policy keeps exact identifiers, hashes, prohibited paths, and fail-closed errors as blocking evidence. Ambiguous token matches remain warnings only. A production server's canonical blocked-ID/hash registry is still not approved and must not be inferred from the beta defaults.
+The default policy treats exact Mod IDs, exact configured hashes, prohibited pack paths, and configured fail-closed scan errors as blocking evidence. Ambiguous token matches remain warning-only. No canonical production-server blocked-ID/hash registry has been approved.
 
-## Remaining limitations and gates
+## Security limits
 
-The following are not proven by this evidence:
+This evidence does not change the following architectural limits:
 
-- A normal client mod cannot prevent a user from deleting or modifying the scanner.
-- No server-side attestation or cryptographic proof of a client scan exists.
-- Client setup scanning does not guarantee that every other mod was prevented from running earlier initialization code.
-- The physical-client gates use the NeoGradle development launch environment. The generated JAR itself is proven on a fresh packaged dedicated server, but not yet in a separately installed launcher-managed client profile.
-- No Windows or macOS runtime evidence is recorded.
-- No production server policy has yet fixed a canonical allowed-Mod manifest or complete blocked-ID/hash registry.
-- The project icon is not yet present.
+- a user can remove or modify a normal client-side scanner;
+- no server-side cryptographic attestation proves that a scan occurred;
+- client setup scanning cannot guarantee that every other mod executed no earlier initialization code;
+- a malicious modified client can falsify local behavior or logs;
+- no Windows or macOS external-profile runtime evidence is recorded.
 
-## Next release-readiness gate
+## Remaining release gates
 
-Before changing the version to stable `1.1.0` or marking PR #1 ready for review:
+Before stable `1.1.0` or Ready for Review:
 
-1. install the exact generated JAR in a normal NeoForge `21.1.235` client profile;
-2. record a clean launch and one startup-block fixture outside the development environment;
-3. add and verify the project icon if it is intended for the release;
-4. approve the canonical production policy or explicitly keep the scanner user-configured;
-5. perform a final exact-head review and rerun both workflows.
+1. upload and verify the intended project icon if it will ship;
+2. approve a canonical production policy or explicitly keep the scanner user-configured;
+3. review the exact tested implementation and updated evidence;
+4. decide whether a manual official-Mojang-Launcher GUI launch is desired in addition to the completed independent launcher-managed profile test.
+
+The previous requirement for an external launcher-managed clean launch and startup-block fixture is now satisfied.
