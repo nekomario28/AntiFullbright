@@ -5,178 +5,187 @@
 - Repository: `nekomario28/AntiFullbright`
 - Pull request: `#1`
 - Branch: `agent/client-content-scanner`
-- Audited GameTest implementation head: `98f47cafff513aaa68489cafd0020f41659b0f1e`
+- Tested implementation head: `1bf1fce7f7078817546d6deb7efdc39703c71ee4`
 - Base: `main@b39b39e6f7886216d2bf5db9393eec71fccb1871`
 - Candidate version: `1.1.0-beta.1`
+- Minecraft: `1.21.1`
+- NeoForge: `21.1.235`
+- Java: `21`
 - PR state: Draft
 - Merge authorization: none
 - Stable release authorization: none
 
-This record covers isolated NeoForge GameTests for server contracts and deterministic dark-mining behavior. It does not claim complete warning, persistence, or time-threshold coverage.
+This record covers the isolated GameTest suite, production-JAR isolation, packaged-server startup, and a real same-world server restart persistence test. It does not authorize merge or release.
+
+## Exact-head workflow summary
+
+All required workflows passed at `1bf1fce7f7078817546d6deb7efdc39703c71ee4`:
+
+| Workflow | Run | Result |
+| --- | ---: | --- |
+| Build | `30488049987` | success |
+| GameTest | `30488049916` | success |
+| Packaged Server | `30488049932` | success |
+| External Runtime | `30488049969` | success |
 
 ## GameTest workflow
 
-- GitHub Actions run: `30344683179`
-- Head SHA: `98f47cafff513aaa68489cafd0020f41659b0f1e`
+- GitHub Actions run: `30488049916`
 - Result: success
 - Artifact: `gametest-log`
-- Artifact ID: `8682435847`
-- Artifact digest: `sha256:ff20efd48b7180c1c8bbc9bad08415edcd857f23da7e7c8773f3b3b2cfc2a7fa`
+- Artifact ID: `8738512289`
+- Artifact digest: `sha256:014d2ae89ff7fef7d5986b9ee723572020a79cb5b765d752c40ced5987ff9040`
 
-Required markers in the saved log:
+Required saved-log markers:
 
 ```text
 Enabled Gametest Namespaces: [antifullbright]
 Registered AntiFullbright GameTests
-11 tests are now running
-11 GAME TESTS COMPLETE
-All 11 required tests passed :)
-Game test server shutting down
-BUILD SUCCESSFUL
+24 tests are now running
+24 GAME TESTS COMPLETE
+All 24 required tests passed :)
+Stopping server
 ```
 
-## Executed tests
+The successful run also emitted the expected warning-threshold evidence at `continuousMiningSeconds=61`, `countedBlocks=20`, first with `warningCount=1` and then with `warningCount=2`.
 
-### Data-pack and command contracts
+## Executed tests — 24 total
 
-1. `minecraft:stone` is present in `antifullbright:dark_mining_counted_blocks`.
-2. `minecraft:torch` is present in `antifullbright:dark_mining_light_sources`.
-3. The running server command dispatcher contains the `/darkmining` root command.
+### `ServerContractGameTests` — 11
 
-### Minimal dark-mining behavior
+1. `countedBlockTagContainsStone` — verifies `minecraft:stone` is in `antifullbright:dark_mining_counted_blocks`.
+2. `lightSourceTagContainsTorch` — verifies `minecraft:torch` is in `antifullbright:dark_mining_light_sources`.
+3. `darkMiningCommandIsRegistered` — verifies `/darkmining` exists in the live dispatcher.
+4. `survivalBreakInCompleteDarknessStartsCountedSession` — a qualifying stone break starts a one-block session.
+5. `creativePlayerIsExcludedFromDarkMiningCount` — creative remains at zero with the expected exclusion reason.
+6. `playerPlacedBlockIsExcludedOnce` — first break is excluded and the next break is counted.
+7. `placingTorchResetsActiveSession` — tagged light-source placement resets an active session.
+8. `heldTorchStartsGraceWithoutCounting` — held torch starts positive grace without incrementing the count.
+9. `nightVisionPlayerIsExcludedFromDarkMiningCount` — Night Vision remains excluded.
+10. `operatorIsExcludedFromDarkMiningCount` — permission-level-two operator remains excluded.
+11. `spectatorIsExcludedFromDarkMiningCount` — spectator remains excluded.
 
-4. A non-excluded player breaking stone in complete darkness starts a session with `countedBlocks=1`.
-5. A creative player remains at `countedBlocks=0`, and the debug result identifies creative mode as the exclusion reason.
-6. A player-placed stone is excluded on the first break; the same position is counted on the next break, proving that the placement exclusion is consumed once rather than becoming permanent.
-7. Placing a tagged, light-emitting torch resets an established one-block dark-mining session to zero.
-8. Holding a tagged torch during the first qualifying break leaves the count at zero and starts a positive light-holding grace period.
-9. A deterministic Night Vision fixture remains at zero and reports Night Vision as the exclusion reason.
-10. A deterministic permission-level-two operator fixture remains at zero and reports server operator as the exclusion reason.
-11. A deterministic spectator fixture remains at zero and reports spectator mode as the exclusion reason.
+### `AdvancedDarkMiningGameTests` — 11
 
-The tests query production status and debug output rather than reproducing the detector's session counters inside the test code.
+12. `heldTorchGraceExpiresAndThenCounts` — mining counts after the held-light grace deadline expires.
+13. `inactivityResetsBeforeTheNextCount` — an inactive session is reset before the next qualifying break.
+14. `expiredPlayerPlacedBlockRecordIsCounted` — an expired placement record no longer suppresses counting.
+15. `thresholdIssuesFirstWarningAndResetsSession` — the configured duration and block threshold issues warning level one and resets the session.
+16. `repeatedThresholdProgressesToSecondWarning` — a repeated threshold event advances the warning level to two.
+17. `underwaterPlayerIsExcluded` — underwater players remain excluded.
+18. `fakePlayerIsExcluded` — NeoForge `FakePlayer` remains excluded.
+19. `commandTreeContainsAllAdministratorOperations` — reload, status, reset, setwarning, and debug command branches exist.
+20. `explicitResetClearsActiveSession` — an explicit reset clears active session state.
+21. `logoutClearsSessionAndPlacementRecord` — logout cleanup removes session and placement state.
+22. `chunkUnloadClearsPlacementRecord` — chunk-unload cleanup removes placement records in that chunk.
 
-## Test-only structures
+### `PlacementCapacityGameTests` — 1
 
-The GameTest source set contains two structures:
+23. `oldestPlacementIsEvictedAtConfiguredMaximum` — reaching the placement-record limit evicts the oldest record and retains newer entries.
+
+### `CommandExecutionGameTests` — 1
+
+24. `administratorCommandsMutateAndReportWarningState` — real Brigadier execution of `setwarning`, `status`, `debug`, and `reset` mutates and reports production state correctly.
+
+The tests query production manager state and command output rather than reproducing the detector algorithm in test code.
+
+## Test-only structures and isolation
+
+The isolated `src/gameTest` source set contains:
 
 ```text
 src/gameTest/resources/data/antifullbright/structure/empty.nbt
 src/gameTest/resources/data/antifullbright/structure/dark_room.nbt
 ```
 
-### `antifullbright:empty`
+- `antifullbright:empty`: `1 x 1 x 1`, data version `3955`, compressed NBT SHA-256 `73422112d58c01d2493dc6ceb1ad6e527ac877965d599aff7254f3bc376297ae`
+- `antifullbright:dark_room`: `5 x 5 x 5`, sealed stone shell, data version `3955`, compressed NBT SHA-256 `32e69f310fedda9dc2b8de77e64275efcd9ebd7f5314fe5abe4dbcf7f6974d73`
 
-- dimensions: `1 x 1 x 1`
-- Minecraft data version: `3955`
-- compressed NBT SHA-256: `73422112d58c01d2493dc6ceb1ad6e527ac877965d599aff7254f3bc376297ae`
+The darkness tests verify block and sky light are both zero at the player eyes and broken block.
 
-### `antifullbright:dark_room`
-
-- dimensions: `5 x 5 x 5`
-- stone outer shell with an air interior
-- Minecraft data version: `3955`
-- compressed NBT SHA-256: `32e69f310fedda9dc2b8de77e64275efcd9ebd7f5314fe5abe4dbcf7f6974d73`
-
-The behavior tests directly verify that both the player's eye position and the target block have block light `0` and sky light `0` before using the room as a darkness fixture.
-
-The GameTest run enables only the `antifullbright` test namespace. It does not depend on a presumed `minecraft:empty` structure or enable unrelated test namespaces.
-
-## Deterministic player fixtures
-
-NeoForge's standard GameTest mock player is creative and has no network connection. It is used only for the creative exclusion test.
-
-Other tests use test-only `ServerPlayer` subclasses that explicitly control the predicates consumed by production code:
-
-- `isCreative()`
-- `isSpectator()`
-- permission level checks
-- Night Vision presence
-
-These fixtures avoid modifying global server configuration and avoid sending packets through a nonexistent test connection. They remain under `src/gameTest` and are not packaged.
-
-## Test-source isolation
-
-The Packaged Server workflow lists the generated JAR entries and fails if it contains any of:
-
-```text
-ServerContractGameTests
-src/gameTest
-data/antifullbright/structure/
-```
-
-The isolation check passed at the audited implementation head. The normal packaged server also fails if GameTest registration is unexpectedly activated.
+The Packaged Server workflow rejects a production JAR containing GameTest classes, `src/gameTest`, or `data/antifullbright/structure/`. It also fails if GameTest registration is activated in the normal packaged server.
 
 ## Packaged production verification
 
-- GitHub Actions run: `30344683160`
-- Head SHA: `98f47cafff513aaa68489cafd0020f41659b0f1e`
+- GitHub Actions run: `30488049932`
 - Result: success
 - Artifact: `packaged-server-evidence`
-- Artifact ID: `8682446145`
-- Artifact digest: `sha256:15378b938e70fe0a56336b70c202b83ef4d7f71f786b16bf78bb1dbfaffd23d5`
-- Generated JAR SHA-256: `bcbd81780e9212c66e4f6b8e2c95b480cb06267708ad32281ee9f6331b5efc0b`
-- Verified NeoForge installer SHA-256: `58edd322dc3cbbcd5c75d9a44f93d01211fda2953665483077ddd41fbecf942c`
+- Artifact ID: `8738533866`
+- Artifact digest: `sha256:0c341ae4c804d145d0227d9a367abad2dff29372aab2f36f7d90f5530269b5c2`
+- Generated AntiFullbright JAR SHA-256: `bdfd1cd6eb07204d599df4d8bc09132ceaccffcac6028d0a2fd6ee944ecc7ff1`
+- Verified official NeoForge installer SHA-256: `58edd322dc3cbbcd5c75d9a44f93d01211fda2953665483077ddd41fbecf942c`
 
-The generated JAR was installed into a fresh official NeoForge `21.1.235` server. Required runtime markers were present:
+The exact generated JAR was installed into a fresh official NeoForge `21.1.235` server outside the development run directory. AntiFullbright and Minecraft readiness markers were present, and GameTest registration was absent.
 
-```text
-Anti Fullbright 1.1.0-beta.1 (antifullbright)
-AntiFullbright dark-mining detection is ready
-Done (5.230s)! For help, type "help"
-```
+## Real server restart persistence
 
-`Registered AntiFullbright GameTests` was absent from the normal packaged-server log.
+The `External Runtime` workflow performs a real two-process restart test rather than only serializing and deserializing NBT in memory.
 
-## Regression verification
+- GitHub Actions run: `30488049969`
+- Job: `restart-persistence`
+- Result: success
+- Artifact: `restart-persistence-evidence`
+- Artifact ID: `8738542790`
+- Artifact digest: `sha256:55e8e5bd36b9c4b4b750ae8e0f50fa7f9bf74e260ff1185be5eec2b204d5ae24`
+- Generated JAR SHA-256: `bdfd1cd6eb07204d599df4d8bc09132ceaccffcac6028d0a2fd6ee944ecc7ff1`
+- Saved warning-data SHA-256: `11143ce55b3735601b95e0bae0fdc7917c5be462945e39037ccf54afb5037654`
 
-The general Build workflow also passed at the same head:
+Procedure and observed result:
 
-- GitHub Actions run: `30344683208`
-- JUnit and full Gradle build: success
-- development dedicated server: success
-- physical client clean startup: success
-- runtime resource-pack mutation block: success
-- startup resource-pack block: success
+1. Install a fresh official NeoForge server and add only the generated AntiFullbright JAR.
+2. Connect an actual Minecraft protocol client named `PersistenceBot`.
+3. Execute `/darkmining setwarning PersistenceBot 3` through the server console.
+4. Execute `save-all flush` and stop the server normally.
+5. Confirm `world/data/antifullbright_warnings.dat` exists and record its SHA-256.
+6. Start a new server process using the same world directory.
+7. Reconnect the same player identity and execute `/darkmining status PersistenceBot`.
+8. Confirm the restored result reports `warningLevel=3`.
 
-Relevant artifacts:
+Both server processes reached the normal `Done (...)` marker. This closes the previous real-restart persistence gap for warning state.
+
+## Build regression verification
+
+Build run `30488049987` passed at the same exact head, including:
+
+- production and test compilation;
+- JUnit and full Gradle build;
+- development dedicated-server startup;
+- physical development client clean startup;
+- runtime resource-pack mutation blocking;
+- startup blocking with a prohibited resource pack already present.
+
+Key Build artifacts:
 
 | Artifact | ID | Digest |
 | --- | ---: | --- |
-| `antifullbright` | `8682424878` | `sha256:fc07c12c1f1bf1fac15e96d5134b72b2d5cc7f85d236cdab0cce0433e6cd09e6` |
-| `gradle-build-log` | `8682424546` | `sha256:ce5e01676d02fb9ace90ab953d864072a165a5f4d2e263c4962a64b5d78bf336` |
-| `dedicated-server-smoke-log` | `8682450467` | `sha256:b9a655625c61ad9874d9d6790365767df7bf8f930931f7bc3c2a823355b54b44` |
-| `physical-client-resourcepack-mutation-log` | `8682468263` | `sha256:a90b08b536ec1250629f779c734b8fbac5847fec70ced8fadd24752555a097eb` |
-| `physical-client-startup-block-log` | `8682480440` | `sha256:71fd57a248fd413321366aaff587bcbf7df3c3c1f7d85e3815fd174b989c91dc` |
+| `antifullbright` | `8738503533` | `sha256:e86addea3fce207ca5d37978208c26c4390e58763baf7b47747f410cd2a1e8df` |
+| `gradle-build-log` | `8738503271` | `sha256:dafcee635ccbcf27df97bdc49f7868bad71d00d1b4459c261a4dbf30c5fa6758` |
+| `dedicated-server-smoke-log` | `8738525567` | `sha256:8544efe494735b58a68b660ca48ddcc0cfbf469fb13d3f3d7a822caec1f5b4ca` |
+| `physical-client-resourcepack-mutation-log` | `8738540378` | `sha256:7e5cf65530c8ca82e839de6dcaba3060d2a12158a8b9fcf8a4dc08179076a0bf` |
+| `physical-client-startup-block-log` | `8738551427` | `sha256:ce0909692c99b31aa739303aad4510ac6702f0b56d5208b502d12e17c3cdca29` |
 
-## What this phase proves
+## What this evidence proves
 
-On NeoForge `21.1.235` and Minecraft `1.21.1`, this phase proves that:
+On Minecraft `1.21.1`, NeoForge `21.1.235`, and Java 21, the exact tested implementation head proves:
 
-- the isolated GameTest source set compiles and registers only when its explicit test property is enabled;
-- exactly eleven required tests start and pass;
-- built-in tags and command registration are available in a real GameTest server;
-- a qualifying dark break starts a production session;
-- creative, spectator, Night Vision, and operator exclusion branches produce zero count and the expected reason;
-- player-placed block exclusion is single-use;
-- torch placement resets an active session;
-- held-torch grace starts without incrementing the count;
-- test-only Java and structure assets do not leak into the release JAR;
-- normal packaged-server startup does not activate GameTests;
-- existing client scanner and server startup gates remain successful.
+- all 24 isolated GameTests start and pass;
+- duration and minimum-block warning thresholds are exercised;
+- warning progression through level two is exercised;
+- held-light grace expiration and inactivity reset are exercised;
+- underwater and FakePlayer exclusions are exercised;
+- placement expiration, capacity eviction, logout cleanup, and chunk-unload cleanup are exercised;
+- administrator command structure and real command execution are exercised;
+- warning SavedData survives a complete stop and restart using the same world;
+- GameTest-only code and structures do not leak into the release JAR;
+- a fresh packaged server starts with the generated JAR and without GameTest activation.
 
-## Remaining deterministic coverage gate
+## Remaining limits
 
-The following behavior is not yet covered because it depends on real time, mutable global configuration, persistent server state, or more complex event fixtures:
+The following are still not fully proven by this phase:
 
-- continuous duration and minimum-block warning thresholds;
-- warning issuance, kick progression, and warning decay;
-- grace-period expiration after elapsed real time;
-- inactivity, death, logout, dimension-change, and teleport event wiring;
-- underwater and FakePlayer exclusions;
-- player-placed block expiration and maximum-entry eviction;
-- SavedData persistence across an actual server restart;
-- `/darkmining reload`, status, reset, setwarning, and debug command semantics;
-- localization assertions under both configured languages.
+- a complete end-to-end test beginning with an actual NeoForge `BlockEvent.BreakEvent` and ending in a real player kick at the configured warning limit;
+- long-duration warning decay across real wall-clock time;
+- localization assertions for every command and warning under both languages;
+- Windows and macOS runtime behavior.
 
-Further expansion should first introduce a deterministic clock/configuration seam or dedicated persistence fixture. It should not mutate shared global configuration concurrently or duplicate the production detector algorithm inside tests.
+These remaining limits do not invalidate the 24-test result or the verified same-world restart persistence result.
