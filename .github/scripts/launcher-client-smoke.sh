@@ -49,7 +49,7 @@ launch_client() {
         --uuid 4e790de5-19df-3a76-9f1c-0fce3c61e978 \
         --jvm "${JAVA_BIN}" \
         '--jvm-args=-Xmx2G -XX:+UseG1GC' \
-        "neoforge:${MINECRAFT_VERSION}-${NEOFORGE_VERSION}" \
+        "neoforge:${NEOFORGE_VERSION}" \
         </dev/null > "${log_file}" 2>&1 &
     echo $!
 }
@@ -121,7 +121,7 @@ PY
 block_pid="$(launch_client "${BLOCK_LOG}")"
 wait_for_markers "${block_pid}" "${BLOCK_LOG}" blocked
 
-echo "PortableMC external profile: neoforge:${MINECRAFT_VERSION}-${NEOFORGE_VERSION}"
+echo "PortableMC external profile: Minecraft ${MINECRAFT_VERSION}, NeoForge ${NEOFORGE_VERSION}"
 grep -F 'Backend library: LWJGL version' "${CLEAN_LOG}" | tail -n 1
 grep -F 'Client content scan completed: No findings' "${CLEAN_LOG}" | tail -n 1
 grep -F 'Watching resource packs for changes:' "${CLEAN_LOG}" | tail -n 1
