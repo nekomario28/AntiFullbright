@@ -6,6 +6,7 @@ import net.minecraft.client.gui.screens.DisconnectedScreen;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 import net.neoforged.fml.loading.FMLPaths;
 
@@ -13,6 +14,7 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashSet;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -57,14 +59,33 @@ public final class ClientScanBootstrap {
     }
 
     private static Set<Path> ownArchive() {
+        LinkedHashSet<Path> archives = new LinkedHashSet<>();
+
+        try {
+            var ownModFile = ModList.get().getModFileById(AntiFullbright.MOD_ID);
+            if (ownModFile != null) {
+                addArchive(archives, ownModFile.getFile().getFilePath());
+            }
+        } catch (RuntimeException exception) {
+            AntiFullbright.LOGGER.warn("Could not identify the AntiFullbright archive through NeoForge", exception);
+        }
+
         try {
             var source = AntiFullbright.class.getProtectionDomain().getCodeSource();
-            if (source == null) return Set.of();
-            Path path = Path.of(source.getLocation().toURI()).toAbsolutePath().normalize();
-            return Files.isRegularFile(path) ? Set.of(path) : Set.of();
+            if (source != null) {
+                addArchive(archives, Path.of(source.getLocation().toURI()));
+            }
         } catch (URISyntaxException | IllegalArgumentException exception) {
-            AntiFullbright.LOGGER.warn("Could not identify the AntiFullbright archive; it will be scanned normally", exception);
-            return Set.of();
+            AntiFullbright.LOGGER.warn("Could not identify the AntiFullbright archive from its code source", exception);
+        }
+
+        return Set.copyOf(archives);
+    }
+
+    private static void addArchive(Set<Path> archives, Path candidate) {
+        Path path = candidate.toAbsolutePath().normalize();
+        if (Files.isRegularFile(path)) {
+            archives.add(path);
         }
     }
 
