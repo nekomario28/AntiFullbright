@@ -10,7 +10,9 @@ readonly WORK_DIR="${PROFILE_ROOT}/instance"
 readonly PORTABLEMC="${PORTABLEMC_BIN:-.portablemc-venv/bin/portablemc}"
 readonly JAVA_BIN="${JAVA_HOME:+${JAVA_HOME}/bin/java}"
 readonly CLEAN_LOG="launcher-client-clean.log"
+readonly CLEAN_GAME_LOG="launcher-client-clean-game.log"
 readonly BLOCK_LOG="launcher-client-startup-block.log"
+readonly BLOCK_GAME_LOG="launcher-client-startup-block-game.log"
 readonly MOD_DIGEST="launcher-client-mod.sha256"
 
 mod_jar="build/libs/antifullbright-${MOD_VERSION}.jar"
@@ -27,14 +29,16 @@ if [[ -z "${JAVA_BIN}" || ! -x "${JAVA_BIN}" ]]; then
     exit 1
 fi
 
-rm -rf "${PROFILE_ROOT}"
-rm -f "${CLEAN_LOG}" "${BLOCK_LOG}" "${MOD_DIGEST}"
+# Keep MAIN_DIR cacheable across runs, but always recreate the isolated game instance.
+rm -rf "${WORK_DIR}"
+rm -f "${CLEAN_LOG}" "${CLEAN_GAME_LOG}" "${BLOCK_LOG}" "${BLOCK_GAME_LOG}" "${MOD_DIGEST}"
 mkdir -p "${MAIN_DIR}" "${WORK_DIR}/mods" "${WORK_DIR}/resourcepacks"
 cp "${mod_jar}" "${WORK_DIR}/mods/"
 sha256sum "${mod_jar}" | tee "${MOD_DIGEST}"
 
 launch_client() {
     local log_file="$1"
+    rm -f "${WORK_DIR}/logs/latest.log"
     setsid env -u DISPLAY -u XAUTHORITY \
         LIBGL_ALWAYS_SOFTWARE=1 \
         ALSOFT_DRIVERS=null \
@@ -62,23 +66,31 @@ stop_client() {
     wait "${process_id}" 2>/dev/null || true
 }
 
+has_marker() {
+    local launcher_log="$1"
+    local pattern="$2"
+    grep -Fq "${pattern}" "${launcher_log}" 2>/dev/null \
+        || grep -Fq "${pattern}" "${WORK_DIR}/logs/latest.log" 2>/dev/null
+}
+
 wait_for_markers() {
     local process_id="$1"
-    local log_file="$2"
-    local mode="$3"
+    local launcher_log="$2"
+    local copied_game_log="$3"
+    local mode="$4"
     local ready=0
 
-    for _ in $(seq 1 480); do
+    for _ in $(seq 1 360); do
         if [[ "${mode}" == clean ]]; then
-            if grep -Fq 'Backend library: LWJGL version' "${log_file}" 2>/dev/null \
-                && grep -Fq 'Client content scan completed: No findings' "${log_file}" 2>/dev/null \
-                && grep -Fq 'Watching resource packs for changes:' "${log_file}" 2>/dev/null; then
+            if has_marker "${launcher_log}" 'Backend library: LWJGL version' \
+                && has_marker "${launcher_log}" 'Client content scan completed: No findings' \
+                && has_marker "${launcher_log}" 'Watching resource packs for changes:'; then
                 ready=1
                 break
             fi
         else
-            if grep -Fq 'AntiFullbright blocked client setup.' "${log_file}" 2>/dev/null \
-                && grep -Fq 'blocked_pack_path' "${log_file}" 2>/dev/null; then
+            if has_marker "${launcher_log}" 'AntiFullbright blocked client setup.' \
+                && has_marker "${launcher_log}" 'blocked_pack_path'; then
                 ready=1
                 break
             fi
@@ -90,23 +102,31 @@ wait_for_markers() {
         sleep 1
     done
 
+    if [[ -f "${WORK_DIR}/logs/latest.log" ]]; then
+        cp "${WORK_DIR}/logs/latest.log" "${copied_game_log}"
+    fi
     stop_client "${process_id}"
 
     if [[ "${ready}" -ne 1 ]]; then
         echo "Launcher client did not reach the required ${mode} markers." >&2
-        tail -n 320 "${log_file}" >&2 || true
+        echo '--- launcher output ---' >&2
+        tail -n 200 "${launcher_log}" >&2 || true
+        echo '--- instance latest.log ---' >&2
+        tail -n 320 "${copied_game_log}" >&2 || true
         exit 1
     fi
 
-    if grep -Eq 'NoClassDefFoundError|ClassNotFoundException|ModLoadingException|ModLoadingCrashException|Failed to create window|GLFW error|Error starting SoundSystem' "${log_file}"; then
-        echo "Launcher client log contains an unrelated runtime failure." >&2
-        tail -n 320 "${log_file}" >&2
+    if grep -Ehq 'NoClassDefFoundError|ClassNotFoundException|ModLoadingException|ModLoadingCrashException|Failed to create window|GLFW error|Error starting SoundSystem' \
+        "${launcher_log}" "${copied_game_log}" 2>/dev/null; then
+        echo "Launcher client logs contain an unrelated runtime failure." >&2
+        tail -n 200 "${launcher_log}" >&2 || true
+        tail -n 320 "${copied_game_log}" >&2 || true
         exit 1
     fi
 }
 
 clean_pid="$(launch_client "${CLEAN_LOG}")"
-wait_for_markers "${clean_pid}" "${CLEAN_LOG}" clean
+wait_for_markers "${clean_pid}" "${CLEAN_LOG}" "${CLEAN_GAME_LOG}" clean
 
 python3 - <<'PY'
 from pathlib import Path
@@ -119,11 +139,11 @@ with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
 PY
 
 block_pid="$(launch_client "${BLOCK_LOG}")"
-wait_for_markers "${block_pid}" "${BLOCK_LOG}" blocked
+wait_for_markers "${block_pid}" "${BLOCK_LOG}" "${BLOCK_GAME_LOG}" blocked
 
 echo "PortableMC external profile: Minecraft ${MINECRAFT_VERSION}, NeoForge ${NEOFORGE_VERSION}"
-grep -F 'Backend library: LWJGL version' "${CLEAN_LOG}" | tail -n 1
-grep -F 'Client content scan completed: No findings' "${CLEAN_LOG}" | tail -n 1
-grep -F 'Watching resource packs for changes:' "${CLEAN_LOG}" | tail -n 1
-grep -F 'AntiFullbright blocked client setup.' "${BLOCK_LOG}" | tail -n 1
-grep -F 'blocked_pack_path' "${BLOCK_LOG}" | tail -n 1
+grep -F 'Backend library: LWJGL version' "${CLEAN_GAME_LOG}" | tail -n 1
+grep -F 'Client content scan completed: No findings' "${CLEAN_GAME_LOG}" | tail -n 1
+grep -F 'Watching resource packs for changes:' "${CLEAN_GAME_LOG}" | tail -n 1
+grep -F 'AntiFullbright blocked client setup.' "${BLOCK_GAME_LOG}" | tail -n 1
+grep -F 'blocked_pack_path' "${BLOCK_GAME_LOG}" | tail -n 1
