@@ -11,6 +11,38 @@ import java.util.Set;
 public final class ClientScanConfig {
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
+    static final boolean DEFAULT_FAIL_CLOSED = false;
+    static final String DEFAULT_BLOCKED_MOD_IDS = "fullbright";
+    static final String DEFAULT_SUSPICIOUS_MOD_TOKENS = String.join(",",
+            "fullbright",
+            "full_bright",
+            "full-bright",
+            "gammabright",
+            "gamma-bright",
+            "gammautils",
+            "gamma-utils",
+            "boostedbrightness",
+            "boosted-brightness",
+            "truefullbright",
+            "true-fullbright",
+            "fullbrightutils",
+            "fullbright-utils",
+            "resourcegammautils",
+            "resource-gamma-utils");
+    static final String DEFAULT_SUSPICIOUS_RESOURCE_PACK_TOKENS = String.join(",",
+            "fullbright",
+            "full_bright",
+            "full-bright",
+            "nightvision",
+            "night-vision",
+            "gammabright",
+            "gamma-bright");
+    static final String DEFAULT_BLOCKED_RESOURCE_PACK_PATHS = String.join(",",
+            "assets/minecraft/optifine/lightmap/",
+            "assets/minecraft/mcpatcher/lightmap/");
+    static final String DEFAULT_BLOCKED_MOD_SHA256 = "";
+    static final String DEFAULT_BLOCKED_RESOURCE_PACK_SHA256 = "";
+
     public static final ModConfigSpec.BooleanValue ENABLED = bool("enabled", true,
             "Enable client-side mod and resource-pack scanning.");
     public static final ModConfigSpec.BooleanValue SCAN_MODS = bool("scanMods", true,
@@ -19,8 +51,10 @@ public final class ClientScanConfig {
             "Scan ZIP and unpacked resource packs during client setup.");
     public static final ModConfigSpec.BooleanValue WATCH_RESOURCE_PACKS = bool("watchResourcePacks", true,
             "Watch the resourcepacks directory recursively and rescan after changes.");
-    public static final ModConfigSpec.BooleanValue FAIL_CLOSED = bool("failClosed", true,
-            "Treat unreadable, malformed, or over-limit content as blocking findings.");
+    public static final ModConfigSpec.BooleanValue FAIL_CLOSED = bool("failClosed", DEFAULT_FAIL_CLOSED,
+            "Treat unreadable, malformed, or over-limit content as blocking findings. "
+                    + "The production default is false to avoid blocking on ambiguous scan failures; "
+                    + "controlled deployments may enable strict fail-closed behavior.");
     public static final ModConfigSpec.BooleanValue DISCONNECT_ON_RUNTIME_DETECTION = bool(
             "disconnectOnRuntimeDetection", true,
             "Safely leave the current world and display a blocking screen after runtime detection.");
@@ -35,25 +69,23 @@ public final class ClientScanConfig {
             "Maximum bytes read from one metadata text file.");
 
     public static final ModConfigSpec.ConfigValue<String> BLOCKED_MOD_IDS = string(
-            "blockedModIds", "fullbright",
-            "Comma-separated exact Mod IDs that produce blocking findings.");
+            "blockedModIds", DEFAULT_BLOCKED_MOD_IDS,
+            "Comma-separated exact declared Mod IDs that produce blocking findings.");
     public static final ModConfigSpec.ConfigValue<String> SUSPICIOUS_MOD_TOKENS = string(
-            "suspiciousModTokens",
-            "fullbright,full_bright,full-bright,gammautils,gamma-utils,boostedbrightness,boosted-brightness",
+            "suspiciousModTokens", DEFAULT_SUSPICIOUS_MOD_TOKENS,
             "Comma-separated tokens that produce warnings when found in mod names, archive paths, or metadata text.");
     public static final ModConfigSpec.ConfigValue<String> SUSPICIOUS_RESOURCE_PACK_TOKENS = string(
-            "suspiciousResourcePackTokens",
-            "fullbright,full_bright,full-bright,nightvision,night-vision",
+            "suspiciousResourcePackTokens", DEFAULT_SUSPICIOUS_RESOURCE_PACK_TOKENS,
             "Comma-separated tokens that produce warnings when found in resource-pack names or pack.mcmeta.");
     public static final ModConfigSpec.ConfigValue<String> BLOCKED_RESOURCE_PACK_PATHS = string(
-            "blockedResourcePackPaths",
-            "assets/minecraft/optifine/lightmap/,assets/minecraft/mcpatcher/lightmap/,assets/minecraft/shaders/core/lightmap",
-            "Comma-separated path fragments that produce blocking findings.");
+            "blockedResourcePackPaths", DEFAULT_BLOCKED_RESOURCE_PACK_PATHS,
+            "Comma-separated precise resource-pack path prefixes that produce blocking findings. "
+                    + "Generic core-shader paths are intentionally not blocked by default.");
     public static final ModConfigSpec.ConfigValue<String> BLOCKED_MOD_SHA256 = string(
-            "blockedModSha256", "",
+            "blockedModSha256", DEFAULT_BLOCKED_MOD_SHA256,
             "Comma-separated SHA-256 hashes for prohibited mod archives. Optional sha256: prefixes are accepted.");
     public static final ModConfigSpec.ConfigValue<String> BLOCKED_RESOURCE_PACK_SHA256 = string(
-            "blockedResourcePackSha256", "",
+            "blockedResourcePackSha256", DEFAULT_BLOCKED_RESOURCE_PACK_SHA256,
             "Comma-separated SHA-256 hashes for prohibited ZIP or unpacked resource packs.");
 
     public static final ModConfigSpec SPEC = BUILDER.build();
@@ -86,7 +118,7 @@ public final class ClientScanConfig {
         return BUILDER.comment(comment).define(name, defaultValue, value -> value instanceof String);
     }
 
-    private static Set<String> csv(String value) {
+    static Set<String> csv(String value) {
         LinkedHashSet<String> values = new LinkedHashSet<>();
         Arrays.stream(value.split(","))
                 .map(String::trim)
