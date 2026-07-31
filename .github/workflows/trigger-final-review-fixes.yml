@@ -17,18 +17,8 @@ jobs:
           ref: agent/client-content-scanner
           fetch-depth: 0
 
-      - name: Execute reviewed fix script
-        shell: bash
-        run: |
-          awk '
-            /^          python3 - <<'\''PY'\''$/ { capture = 1; next }
-            capture && /^          PY$/ { exit }
-            capture { sub(/^          /, ""); print }
-          ' .github/workflows/apply-final-review-fixes.yml > /tmp/apply-final-review-fixes.py
-          test -s /tmp/apply-final-review-fixes.py
-          head -n 1 /tmp/apply-final-review-fixes.py | grep -F 'from pathlib import Path'
-          python3 /tmp/apply-final-review-fixes.py
-          rm -f .github/workflows/trigger-final-review-fixes.yml
+      - name: Apply reviewed scanner fixes
+        run: python3 .github/scripts/apply-final-review-fixes.py
 
       - name: Commit reviewed fixes
         shell: bash
