@@ -25,12 +25,253 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
-      - name: Build
-        run: ./gradlew build --no-daemon
+      - name: Build and test
+        shell: bash
+        run: |
+          set +e
+          ./gradlew build --no-daemon > gradle-build.log 2>&1
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "Gradle build failed; showing the final 160 lines."
+            tail -n 160 gradle-build.log
+            exit "$status"
+          fi
+          tail -n 40 gradle-build.log
+
+      - name: Upload Gradle diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: gradle-build.log
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Upload mod artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: antifullbright
           path: build/libs/antifullbright-*.jar
           if-no-files-found: error
+
+      - name: Install physical-client runtime libraries
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flite1-dev
+          ldconfig -p | grep -F libflite
+
+      - name: Prepare runtime smoke tests
+        shell: bash
+        run: |
+          mkdir -p run/server run/client/resourcepacks
+          printf 'eula=true\n' > run/server/eula.txt
+          printf 'online-mode=false\nserver-port=25565\n' > run/server/server.properties
+          command -v setsid
+          command -v xvfb-run
+          command -v python3
+
+      - name: Run dedicated server startup gate
+        shell: bash
+        run: |
+          set -u
+          setsid ./gradlew runServer --no-daemon > dedicated-server.log 2>&1 &
+          process_id=$!
+          ready=0
+
+          for _ in $(seq 1 180); do
+            if grep -Fq 'Done (' dedicated-server.log 2>/dev/null \
+                && grep -Fq 'AntiFullbright dark-mining detection is ready' dedicated-server.log 2>/dev/null; then
+              ready=1
+              break
+            fi
+            if ! kill -0 "$process_id" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          kill -TERM -- "-$process_id" 2>/dev/null || true
+          sleep 3
+          kill -KILL -- "-$process_id" 2>/dev/null || true
+          wait "$process_id" 2>/dev/null || true
+
+          if [ "$ready" -ne 1 ]; then
+            echo "Dedicated server did not reach all readiness markers."
+            tail -n 200 dedicated-server.log
+            exit 1
+          fi
+
+          if grep -Eq 'NoClassDefFoundError|ClassNotFoundException|ModLoadingException|ModLoadingCrashException' dedicated-server.log; then
+            echo "Dedicated server log contains a class-side or mod-loading failure."
+            tail -n 200 dedicated-server.log
+            exit 1
+          fi
+
+          grep -F 'AntiFullbright dark-mining detection is ready' dedicated-server.log | tail -n 1
+          grep -F 'Done (' dedicated-server.log | tail -n 1
+
+      - name: Upload dedicated server evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dedicated-server-smoke-log
+          path: dedicated-server.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Run physical client and resource-pack mutation gate
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          ALSOFT_DRIVERS: 'null'
+        run: |
+          set -u
+          setsid env -u DISPLAY -u XAUTHORITY \
+            xvfb-run -a -s '-screen 0 1280x720x24 -ac' \
+            ./gradlew runClient --no-daemon </dev/null > physical-client.log 2>&1 &
+          process_id=$!
+          clean_ready=0
+          runtime_blocked=0
+
+          for _ in $(seq 1 180); do
+            if grep -Fq 'Backend library: LWJGL version' physical-client.log 2>/dev/null \
+                && grep -Fq 'Client content scan completed: No findings' physical-client.log 2>/dev/null \
+                && grep -Fq 'Watching resource packs for changes:' physical-client.log 2>/dev/null; then
+              clean_ready=1
+              break
+            fi
+            if ! kill -0 "$process_id" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$clean_ready" -eq 1 ]; then
+            python3 - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          target = Path('run/client/resourcepacks/ci-prohibited-lightmap.zip')
+          with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+              archive.writestr('pack.mcmeta', '{"pack":{"pack_format":34,"description":"AntiFullbright CI mutation fixture"}}')
+              archive.writestr('assets/minecraft/optifine/lightmap/world0.png', b'ci-fixture')
+          PY
+
+            for _ in $(seq 1 45); do
+              if grep -Fq 'Resource-pack rescan completed with blocking findings:' physical-client.log 2>/dev/null \
+                  && grep -Fq 'AntiFullbright blocked local content while the client was running.' physical-client.log 2>/dev/null; then
+                runtime_blocked=1
+                break
+              fi
+              if ! kill -0 "$process_id" 2>/dev/null; then
+                break
+              fi
+              sleep 1
+            done
+          fi
+
+          kill -TERM -- "-$process_id" 2>/dev/null || true
+          sleep 3
+          kill -KILL -- "-$process_id" 2>/dev/null || true
+          wait "$process_id" 2>/dev/null || true
+
+          if [ "$clean_ready" -ne 1 ]; then
+            echo "Physical client did not reach all clean-start readiness markers."
+            tail -n 260 physical-client.log
+            exit 1
+          fi
+
+          if [ "$runtime_blocked" -ne 1 ]; then
+            echo "Resource-pack mutation did not produce the required runtime-block markers."
+            tail -n 260 physical-client.log
+            exit 1
+          fi
+
+          if grep -Eq 'NoClassDefFoundError|ClassNotFoundException|ModLoadingException|ModLoadingCrashException|Failed to create window|GLFW error|Error starting SoundSystem' physical-client.log; then
+            echo "Physical client log contains a side, loading, display, or audio-environment failure."
+            tail -n 260 physical-client.log
+            exit 1
+          fi
+
+          if grep -Fq 'Failed to load library flite' physical-client.log; then
+            echo "Physical client environment still lacks the narrator library."
+            tail -n 260 physical-client.log
+            exit 1
+          fi
+
+          if grep -Fq 'AntiFullbright blocked client setup' physical-client.log; then
+            echo "The clean startup fixture was unexpectedly blocked before runtime mutation."
+            tail -n 260 physical-client.log
+            exit 1
+          fi
+
+          grep -F 'Backend library: LWJGL version' physical-client.log | tail -n 1
+          grep -F 'Client content scan completed: No findings' physical-client.log | tail -n 1
+          grep -F 'Watching resource packs for changes:' physical-client.log | tail -n 1
+          grep -F 'Resource-pack rescan completed with blocking findings:' physical-client.log | tail -n 1
+          grep -F 'AntiFullbright blocked local content while the client was running.' physical-client.log | tail -n 1
+
+      - name: Upload physical client mutation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: physical-client-resourcepack-mutation-log
+          path: physical-client.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Run physical client startup blocking gate
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          ALSOFT_DRIVERS: 'null'
+        run: |
+          set -u
+          setsid env -u DISPLAY -u XAUTHORITY \
+            xvfb-run -a -s '-screen 0 1280x720x24 -ac' \
+            ./gradlew runClient --no-daemon </dev/null > physical-client-startup-block.log 2>&1 &
+          process_id=$!
+          startup_blocked=0
+
+          for _ in $(seq 1 180); do
+            if grep -Fq 'AntiFullbright blocked client setup.' physical-client-startup-block.log 2>/dev/null \
+                && grep -Fq 'blocked_pack_path' physical-client-startup-block.log 2>/dev/null; then
+              startup_blocked=1
+              break
+            fi
+            if ! kill -0 "$process_id" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          kill -TERM -- "-$process_id" 2>/dev/null || true
+          sleep 3
+          kill -KILL -- "-$process_id" 2>/dev/null || true
+          wait "$process_id" 2>/dev/null || true
+
+          if [ "$startup_blocked" -ne 1 ]; then
+            echo "Existing prohibited resource pack did not block client setup with the expected rule."
+            tail -n 280 physical-client-startup-block.log
+            exit 1
+          fi
+
+          if grep -Eq 'NoClassDefFoundError|ClassNotFoundException|Failed to create window|GLFW error|Error starting SoundSystem' physical-client-startup-block.log; then
+            echo "Startup-block client log contains an unrelated side, display, or audio-environment failure."
+            tail -n 280 physical-client-startup-block.log
+            exit 1
+          fi
+
+          grep -F 'AntiFullbright blocked client setup.' physical-client-startup-block.log | tail -n 1
+          grep -F 'blocked_pack_path' physical-client-startup-block.log | tail -n 1
+
+      - name: Upload physical client startup-block evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: physical-client-startup-block-log
+          path: physical-client-startup-block.log
+          if-no-files-found: warn
+          retention-days: 14

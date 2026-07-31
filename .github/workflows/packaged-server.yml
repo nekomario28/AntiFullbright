@@ -1,0 +1,70 @@
+name: Packaged Server
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  packaged-server:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Build beta JAR
+        run: ./gradlew clean build --no-daemon
+
+      - name: Verify GameTest isolation from beta JAR
+        shell: bash
+        run: |
+          jar_file="$(find build/libs -maxdepth 1 -type f -name 'antifullbright-*.jar' -print -quit)"
+          if [ -z "$jar_file" ]; then
+            echo 'Expected AntiFullbright JAR was not found.'
+            exit 1
+          fi
+
+          jar tf "$jar_file" > packaged-jar-entries.txt
+          if grep -Eq 'ServerContractGameTests|AdvancedDarkMiningGameTests|PlacementCapacityGameTests|CommandExecutionGameTests|src/gameTest|data/antifullbright/structure/' packaged-jar-entries.txt; then
+            echo 'GameTest-only code or resources leaked into the beta JAR.'
+            cat packaged-jar-entries.txt
+            exit 1
+          fi
+
+          echo "GameTest isolation verified for $jar_file"
+
+      - name: Install official NeoForge and run packaged JAR
+        shell: bash
+        run: |
+          set +e
+          bash .github/scripts/packaged-server-smoke.sh > packaged-server-run.log 2>&1
+          status=$?
+          cat packaged-server-run.log
+          exit "$status"
+
+      - name: Upload packaged-server evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: packaged-server-evidence
+          path: |
+            packaged-server-run.log
+            packaged-server-install.log
+            packaged-server.log
+            packaged-server-mod.sha256
+            packaged-jar-entries.txt
+          if-no-files-found: warn
+          retention-days: 14

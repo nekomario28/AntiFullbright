@@ -7,8 +7,9 @@ modId="${mod_id}"
 version="${mod_version}"
 displayName="${mod_name}"
 authors="AntiFullbright contributors"
+logoFile="antifullbright.png"
 description='''
-Detects repeated long-duration mining in complete darkness without claiming to identify a particular client modification.
+Detects repeated long-duration mining in complete darkness on servers and can scan local client mods and resource packs for configured Fullbright signatures.
 '''
 
 [[dependencies.${mod_id}]]
@@ -16,11 +17,11 @@ modId="neoforge"
 type="required"
 versionRange="[${neo_version},)"
 ordering="NONE"
-side="SERVER"
+side="BOTH"
 
 [[dependencies.${mod_id}]]
 modId="minecraft"
 type="required"
 versionRange="${minecraft_version_range}"
 ordering="NONE"
-side="SERVER"
+side="BOTH"
