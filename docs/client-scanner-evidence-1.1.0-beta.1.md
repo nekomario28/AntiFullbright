@@ -5,7 +5,9 @@
 - Repository: `nekomario28/AntiFullbright`
 - Pull request: `#1`
 - Branch: `agent/client-content-scanner`
-- Tested implementation head: `1bf1fce7f7078817546d6deb7efdc39703c71ee4`
+- External-runtime implementation head: `1bf1fce7f7078817546d6deb7efdc39703c71ee4`
+- Production policy: `antifullbright/default-v1`
+- Policy document: `docs/production-blocking-policy-1.1.0.md`
 - Base: `main@b39b39e6f7886216d2bf5db9393eec71fccb1871`
 - Candidate version: `1.1.0-beta.1`
 - Minecraft: `1.21.1`
@@ -15,11 +17,11 @@
 - Merge authorization: none
 - Stable release authorization: none
 
-This document records beta implementation evidence. It does not claim tamper-proof client attestation and does not authorize merge or stable release.
+This document records beta implementation, launcher-runtime, and approved default-policy evidence. It does not claim tamper-proof client attestation and does not authorize merge or stable release.
 
-## Exact-head workflow summary
+## Historical exact-head workflow summary
 
-All required workflows passed at `1bf1fce7f7078817546d6deb7efdc39703c71ee4`:
+All required workflows passed at the externally tested implementation head `1bf1fce7f7078817546d6deb7efdc39703c71ee4`:
 
 | Workflow | Run | Result |
 | --- | ---: | --- |
@@ -27,6 +29,55 @@ All required workflows passed at `1bf1fce7f7078817546d6deb7efdc39703c71ee4`:
 | GameTest | `30488049916` | success |
 | Packaged Server | `30488049932` | success |
 | External Runtime | `30488049969` | success |
+
+The final pull-request checks are the source of truth for the later policy, documentation, and icon commits.
+
+## Approved production default policy
+
+The approved policy is versioned as `antifullbright/default-v1`. Its decision rule is:
+
+> BLOCK only on precise, high-confidence evidence. Treat broad names, descriptions, generic paths, and scan uncertainty as WARNING unless a controlled deployment explicitly opts into stricter behavior.
+
+### Default BLOCK boundary
+
+A default installation blocks only:
+
+1. the exact authoritative loader Mod ID `fullbright`;
+2. an exact administrator-configured SHA-256;
+3. either precise resource-pack prefix:
+   - `assets/minecraft/optifine/lightmap/`;
+   - `assets/minecraft/mcpatcher/lightmap/`;
+4. unreadable, malformed, or over-limit content only when `failClosed = true` is explicitly configured.
+
+The public default is `failClosed = false`. Both distributed hash lists are empty.
+
+### Default WARNING boundary
+
+Warnings cover Fullbright, Gamma Bright, Gamma Utils, True Fullbright, Fullbright Utils, Resource Gamma Utils, Boosted Brightness, and Night Vision naming variants when found in filenames, archive paths, or descriptive metadata.
+
+Names and descriptions do not become block rules merely because they are suspicious. Dependency IDs and nested custom JSON IDs are not treated as authoritative declared Mod IDs.
+
+### Explicit false-positive boundary
+
+The generic `assets/minecraft/shaders/core/` path is not blocked. The previous broad `assets/minecraft/shaders/core/lightmap` default was removed because a generic core-shader path is not a sufficiently specific Fullbright signature.
+
+Existing client configuration files are not overwritten by NeoForge. The policy document and both READMEs record the required migration: regenerate the configuration or set `failClosed = false` and retain only the approved OptiFine/MCPatcher path prefixes.
+
+## Policy regression tests
+
+The JUnit suite now locks these production decisions:
+
+- public `failClosed` default is false;
+- exact default blocked Mod ID set is only `fullbright`;
+- default blocked resource-pack paths are exactly the OptiFine and MCPatcher lightmap prefixes;
+- distributed hash lists are empty;
+- Gamma Utils and other discovered names remain warning tokens rather than unreviewed block rules;
+- a precise OptiFine lightmap path blocks;
+- a generic core-shader lightmap file does not block;
+- malformed archives block only under explicit fail-closed mode;
+- descriptions, dependency IDs, and nested IDs remain warning-only when appropriate.
+
+Promotion of a new default rule from WARNING to BLOCK now requires a precise signal, positive fixture, negative fixture, false-positive review, documentation, and a versioned policy change.
 
 ## External launcher-managed client profile
 
@@ -85,7 +136,7 @@ This proves that the generated JAR, when installed in an independently created l
 
 ## Development physical-client regression gates
 
-Build run `30488049987` passed at the same tested implementation head and retained the NeoGradle physical-client gates:
+Build run `30488049987` passed at the same externally tested implementation head and retained the NeoGradle physical-client gates:
 
 - clean Xvfb/software-rendered client startup;
 - recursive resource-pack watcher startup;
@@ -123,7 +174,7 @@ The implementation and automated suite verify:
 - exact Quilt `quilt_loader.id` blocking;
 - dependency or nested custom IDs are not mistaken for the declared Mod ID;
 - configured SHA-256 values can block exact archives;
-- configured prohibited resource-pack paths block ZIP or unpacked packs;
+- configured precise resource-pack paths block ZIP or unpacked packs;
 - ambiguous filename, archive-path, and metadata token matches remain warnings rather than automatic blocks;
 - malformed archives follow the configured fail-open/fail-closed policy;
 - the running AntiFullbright JAR is excluded using NeoForge's loaded-mod file path, with code-source fallback;
@@ -139,7 +190,7 @@ The beta scanner remains client-local and user-editable. It is not represented a
 
 The scanner does not transmit scanned filenames, paths, hashes, or classification results. Findings remain in the local log and blocking screen. Local absolute paths can therefore appear in logs or crash reports; users should redact private path components before sharing them.
 
-The default policy treats exact Mod IDs, exact configured hashes, prohibited pack paths, and configured fail-closed scan errors as blocking evidence. Ambiguous token matches remain warning-only. No canonical production-server blocked-ID/hash registry has been approved.
+The canonical public default is now approved. Controlled deployments may add exact hashes, exact Mod IDs, or enable fail-closed behavior, but those local overrides are not represented as globally authoritative AntiFullbright rules.
 
 ## Security limits
 
@@ -153,11 +204,10 @@ This evidence does not change the following architectural limits:
 
 ## Remaining release gates
 
+The external launcher-managed profile, project icon, real restart persistence, and production default policy gates are complete.
+
 Before stable `1.1.0` or Ready for Review:
 
-1. upload and verify the intended project icon if it will ship;
-2. approve a canonical production policy or explicitly keep the scanner user-configured;
-3. review the exact tested implementation and updated evidence;
-4. decide whether a manual official-Mojang-Launcher GUI launch is desired in addition to the completed independent launcher-managed profile test.
-
-The previous requirement for an external launcher-managed clean launch and startup-block fixture is now satisfied.
+1. complete the final exact-head human review;
+2. confirm all required checks pass on the final policy/documentation head;
+3. decide whether a manual official-Mojang-Launcher GUI launch is desired as additional, non-required evidence.
