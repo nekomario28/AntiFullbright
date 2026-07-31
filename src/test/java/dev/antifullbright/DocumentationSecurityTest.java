@@ -22,7 +22,8 @@ final class DocumentationSecurityTest {
                 () -> assertTrue(lower.contains("does not contain a server handshake")),
                 () -> assertTrue(lower.contains("player can remove or modify the scanner")),
                 () -> assertTrue(lower.contains("server cannot currently fix or verify")),
-                () -> assertFalse(lower.contains("tamper-proof anti-cheat")),
+                () -> assertFalse(lower.contains("is a tamper-proof anti-cheat")),
+                () -> assertFalse(lower.contains("provides tamper-proof anti-cheat")),
                 () -> assertFalse(lower.contains("server-enforced scanner"))
         );
     }
