@@ -198,12 +198,24 @@ PY
 
 start_server "${SERVER_LOG}"
 
+# World spawn is randomized. Force-load the origin before constructing the fixture
+# so the test does not depend on the generated spawn location.
+send_console 'forceload add -16 -16 16 16'
+wait_log "${SERVER_LOG}" '(force loaded|forceload|Marked)' 60
+sleep 3
+
 # Build a sealed room below maximumY with two reachable natural stone targets.
 send_console 'fill -3 -64 -3 3 -57 3 minecraft:stone'
 send_console 'fill -2 -63 -2 2 -58 2 minecraft:air'
 send_console 'setblock 1 -62 0 minecraft:stone'
 send_console 'setblock 1 -62 1 minecraft:stone'
 sleep 3
+
+if grep -Fq 'That position is not loaded' "${SERVER_LOG}"; then
+    echo "The deterministic break-event fixture was not created in a loaded chunk." >&2
+    tail -n 120 "${SERVER_LOG}" >&2
+    exit 1
+fi
 
 MC_PORT="${PORT}" MC_USERNAME="${PLAYER}" BOT_TIMEOUT_MS=240000 \
     node .github/scripts/break-event-bot.js > "${BOT_LOG}" 2>&1 &
@@ -257,6 +269,7 @@ fi
 
 wait_log "${SERVER_LOG}" 'Dark-mining detection: .*"action":"kick"' 60
 sleep 3
+send_console 'forceload remove all'
 stop_server_gracefully "${SERVER_LOG}"
 
 evidence_file="${SERVER_DIR}/logs/dark-mining-detections.jsonl"
