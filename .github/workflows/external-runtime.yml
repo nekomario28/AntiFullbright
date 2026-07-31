@@ -112,3 +112,55 @@ jobs:
             restart-persistence-mod.sha256
           if-no-files-found: warn
           retention-days: 14
+
+  break-event-enforcement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Build exact beta JAR
+        run: ./gradlew clean build --no-daemon
+
+      - name: Install protocol test client
+        shell: bash
+        run: |
+          npm init -y >/dev/null
+          npm install --no-save --ignore-scripts mineflayer@4.37.1
+          node -e "console.log('mineflayer=' + require('mineflayer/package.json').version)"
+          chmod +x .github/scripts/break-event-enforcement-smoke.sh
+
+      - name: Run real packet-to-kick enforcement gate
+        shell: bash
+        run: bash .github/scripts/break-event-enforcement-smoke.sh
+
+      - name: Upload break-event enforcement evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: break-event-enforcement-evidence
+          path: |
+            break-event-enforcement-install.log
+            break-event-enforcement-bootstrap.log
+            break-event-enforcement-server.log
+            break-event-enforcement-bot.log
+            break-event-enforcement-evidence.jsonl
+            break-event-enforcement-mod.sha256
+          if-no-files-found: warn
+          retention-days: 14
