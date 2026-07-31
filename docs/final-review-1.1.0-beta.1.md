@@ -5,6 +5,7 @@
 - Repository: `nekomario28/AntiFullbright`
 - Pull request: `#1`
 - Final implementation head reviewed: `b8710e88f4d7d89bcbff48f72339bfbedaee311d`
+- Exact documentation/CI head accepted: `fff4f01743d431b6592c39a53462c182d953f27f`
 - Base at review: `main@b39b39e6f7886216d2bf5db9393eec71fccb1871`
 - Minecraft: `1.21.1`
 - NeoForge: `21.1.235`
@@ -28,8 +29,19 @@ Regression tests cover both positive and negative boundaries:
 
 The temporary patch-application workflows and scripts were deleted by their correction commits and are not part of the final PR diff.
 
+## Exact-head CI acceptance
+
+All required workflows passed on `fff4f01743d431b6592c39a53462c182d953f27f`:
+
+| Workflow | Run | Result |
+| --- | ---: | --- |
+| Build | `30654324041` | success |
+| GameTest | `30654324280` | success |
+| Packaged Server | `30654324311` | success |
+| External Runtime | `30654324187` | success |
+
 ## Integration decision
 
-No unresolved review thread or known merge-blocking defect remained after the correction. Ready-for-review and merge require all required workflows to pass on the documentation head containing this record.
+No unresolved review thread or known merge-blocking defect remained after the correction. The beta implementation is accepted for Ready for Review and integration into `main`.
 
-This review authorizes integration of the beta implementation after exact-head CI. It does not authorize publication of stable `1.1.0`; the repository version remains `1.1.0-beta.1` until a separate release decision and version transition are completed.
+This review does not authorize publication of stable `1.1.0`; the repository version remains `1.1.0-beta.1` until a separate release decision and version transition are completed.
