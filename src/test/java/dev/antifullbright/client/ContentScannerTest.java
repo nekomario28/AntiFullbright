@@ -21,6 +21,21 @@ class ContentScannerTest {
     Path temporaryDirectory;
 
     @Test
+    void productionDefaultsAreConservativeAndExplicit() {
+        assertFalse(ClientScanConfig.DEFAULT_FAIL_CLOSED);
+        assertEquals(Set.of("fullbright"), ClientScanConfig.csv(ClientScanConfig.DEFAULT_BLOCKED_MOD_IDS));
+        assertEquals(Set.of(
+                        "assets/minecraft/optifine/lightmap/",
+                        "assets/minecraft/mcpatcher/lightmap/"),
+                ClientScanConfig.csv(ClientScanConfig.DEFAULT_BLOCKED_RESOURCE_PACK_PATHS));
+        assertTrue(ClientScanConfig.DEFAULT_BLOCKED_MOD_SHA256.isEmpty());
+        assertTrue(ClientScanConfig.DEFAULT_BLOCKED_RESOURCE_PACK_SHA256.isEmpty());
+        assertFalse(ClientScanConfig.DEFAULT_BLOCKED_RESOURCE_PACK_PATHS.contains("shaders/core"));
+        assertTrue(ClientScanConfig.DEFAULT_SUSPICIOUS_MOD_TOKENS.contains("gammautils"));
+        assertTrue(ClientScanConfig.DEFAULT_SUSPICIOUS_MOD_TOKENS.contains("truefullbright"));
+    }
+
+    @Test
     void exactBlockedModIdProducesBlockingFinding() throws IOException {
         Path mods = Files.createDirectories(temporaryDirectory.resolve("mods"));
         writeZip(mods.resolve("renamed-helper.jar"), Map.of(
@@ -28,11 +43,25 @@ class ContentScannerTest {
                 "[[mods]]\nmodId=\"fullbright\"\nversion=\"1\"\n"
         ));
 
-        ContentScanner.Report report = ContentScanner.scanMods(mods, policy(true));
+        ContentScanner.Report report = ContentScanner.scanMods(mods, productionPolicy(false));
 
         assertTrue(report.hasBlockingFindings());
         assertTrue(report.blockingFindings().stream()
                 .anyMatch(finding -> finding.rule().equals("blocked_mod_id")));
+    }
+
+    @Test
+    void warningTokenModIdDoesNotBecomeAnUnreviewedBlockRule() throws IOException {
+        Path mods = Files.createDirectories(temporaryDirectory.resolve("mods"));
+        writeZip(mods.resolve("renamed-helper.jar"), Map.of(
+                "META-INF/neoforge.mods.toml",
+                "[[mods]]\nmodId=\"gammautils\"\nversion=\"1\"\n"
+        ));
+
+        ContentScanner.Report report = ContentScanner.scanMods(mods, productionPolicy(false));
+
+        assertFalse(report.hasBlockingFindings());
+        assertTrue(report.hasWarnings());
     }
 
     @Test
@@ -44,7 +73,7 @@ class ContentScannerTest {
                         + "[[dependencies.safehelper]]\nmodId=\"fullbright\"\ntype=\"incompatible\"\n"
         ));
 
-        ContentScanner.Report report = ContentScanner.scanMods(mods, policy(true));
+        ContentScanner.Report report = ContentScanner.scanMods(mods, productionPolicy(false));
 
         assertFalse(report.hasBlockingFindings());
         assertTrue(report.hasWarnings());
@@ -58,7 +87,7 @@ class ContentScannerTest {
                 "{\"schemaVersion\":1,\"id\":\"fullbright\",\"version\":\"1\"}"
         ));
 
-        ContentScanner.Report report = ContentScanner.scanMods(mods, policy(true));
+        ContentScanner.Report report = ContentScanner.scanMods(mods, productionPolicy(false));
 
         assertTrue(report.hasBlockingFindings());
         assertTrue(report.blockingFindings().stream()
@@ -74,7 +103,7 @@ class ContentScannerTest {
                         + "\"custom\":{\"id\":\"fullbright\"}}"
         ));
 
-        ContentScanner.Report report = ContentScanner.scanMods(mods, policy(true));
+        ContentScanner.Report report = ContentScanner.scanMods(mods, productionPolicy(false));
 
         assertFalse(report.hasBlockingFindings());
         assertTrue(report.hasWarnings());
@@ -88,7 +117,7 @@ class ContentScannerTest {
                 "{\"schema_version\":1,\"quilt_loader\":{\"id\":\"fullbright\",\"version\":\"1\"}}"
         ));
 
-        ContentScanner.Report report = ContentScanner.scanMods(mods, policy(true));
+        ContentScanner.Report report = ContentScanner.scanMods(mods, productionPolicy(false));
 
         assertTrue(report.hasBlockingFindings());
         assertTrue(report.blockingFindings().stream()
@@ -103,7 +132,7 @@ class ContentScannerTest {
                 "[[mods]]\nmodId=\"safehelper\"\ndescription='Disables fullbright compatibility mode'\n"
         ));
 
-        ContentScanner.Report report = ContentScanner.scanMods(mods, policy(true));
+        ContentScanner.Report report = ContentScanner.scanMods(mods, productionPolicy(false));
 
         assertFalse(report.hasBlockingFindings());
         assertTrue(report.hasWarnings());
@@ -112,18 +141,31 @@ class ContentScannerTest {
     }
 
     @Test
-    void prohibitedLightmapPathProducesBlockingFinding() throws IOException {
+    void prohibitedOptifineLightmapPathProducesBlockingFinding() throws IOException {
         Path packs = Files.createDirectories(temporaryDirectory.resolve("resourcepacks"));
         writeZip(packs.resolve("innocent-name.zip"), Map.of(
                 "pack.mcmeta", "{\"pack\":{\"pack_format\":34,\"description\":\"test\"}}",
                 "assets/minecraft/optifine/lightmap/world0.png", "not-a-real-png"
         ));
 
-        ContentScanner.Report report = ContentScanner.scanResourcePacks(packs, policy(true));
+        ContentScanner.Report report = ContentScanner.scanResourcePacks(packs, productionPolicy(false));
 
         assertTrue(report.hasBlockingFindings());
         assertTrue(report.blockingFindings().stream()
                 .anyMatch(finding -> finding.rule().equals("blocked_pack_path")));
+    }
+
+    @Test
+    void genericCoreShaderPathIsNotBlockedByProductionDefaults() throws IOException {
+        Path packs = Files.createDirectories(temporaryDirectory.resolve("resourcepacks"));
+        writeZip(packs.resolve("legitimate-core-shader.zip"), Map.of(
+                "pack.mcmeta", "{\"pack\":{\"pack_format\":34,\"description\":\"visual shader pack\"}}",
+                "assets/minecraft/shaders/core/lightmap.fsh", "void main() {}"
+        ));
+
+        ContentScanner.Report report = ContentScanner.scanResourcePacks(packs, productionPolicy(false));
+
+        assertFalse(report.hasBlockingFindings());
     }
 
     @Test
@@ -134,7 +176,8 @@ class ContentScannerTest {
                 "META-INF/neoforge.mods.toml", "[[mods]]\nmodId=\"fullbright\"\n"
         ));
 
-        ContentScanner.Report report = ContentScanner.scanMods(mods, policy(true), Set.of(ownArchive));
+        ContentScanner.Report report = ContentScanner.scanMods(
+                mods, productionPolicy(false), Set.of(ownArchive));
 
         assertEquals(0, report.modsScanned());
         assertTrue(report.clean());
@@ -145,22 +188,22 @@ class ContentScannerTest {
         Path mods = Files.createDirectories(temporaryDirectory.resolve("mods"));
         Files.writeString(mods.resolve("broken.jar"), "not a zip", StandardCharsets.UTF_8);
 
-        ContentScanner.Report closed = ContentScanner.scanMods(mods, policy(true));
-        ContentScanner.Report open = ContentScanner.scanMods(mods, policy(false));
+        ContentScanner.Report closed = ContentScanner.scanMods(mods, productionPolicy(true));
+        ContentScanner.Report open = ContentScanner.scanMods(mods, productionPolicy(false));
 
         assertTrue(closed.hasBlockingFindings());
         assertFalse(open.hasBlockingFindings());
         assertTrue(open.hasWarnings());
     }
 
-    private static ContentScanner.Policy policy(boolean failClosed) {
+    private static ContentScanner.Policy productionPolicy(boolean failClosed) {
         return new ContentScanner.Policy(
-                Set.of("fullbright"),
-                Set.of("fullbright"),
-                Set.of("fullbright", "nightvision"),
-                Set.of("assets/minecraft/optifine/lightmap/"),
-                Set.of(),
-                Set.of(),
+                ClientScanConfig.csv(ClientScanConfig.DEFAULT_BLOCKED_MOD_IDS),
+                ClientScanConfig.csv(ClientScanConfig.DEFAULT_SUSPICIOUS_MOD_TOKENS),
+                ClientScanConfig.csv(ClientScanConfig.DEFAULT_SUSPICIOUS_RESOURCE_PACK_TOKENS),
+                ClientScanConfig.csv(ClientScanConfig.DEFAULT_BLOCKED_RESOURCE_PACK_PATHS),
+                ClientScanConfig.csv(ClientScanConfig.DEFAULT_BLOCKED_MOD_SHA256),
+                ClientScanConfig.csv(ClientScanConfig.DEFAULT_BLOCKED_RESOURCE_PACK_SHA256),
                 10_000,
                 1_048_576,
                 failClosed
