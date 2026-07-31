@@ -174,9 +174,9 @@ The implementation and automated suite verify:
 - exact Quilt `quilt_loader.id` blocking;
 - dependency or nested custom IDs are not mistaken for the declared Mod ID;
 - configured SHA-256 values can block exact archives;
-- configured precise resource-pack paths block ZIP or unpacked packs;
+- configured precise resource-pack path prefixes block ZIP or unpacked packs without matching nested documentation paths;
 - ambiguous filename, archive-path, and metadata token matches remain warnings rather than automatic blocks;
-- malformed archives follow the configured fail-open/fail-closed policy;
+- malformed archives and oversized metadata follow the configured fail-open/fail-closed policy;
 - the running AntiFullbright JAR is excluded using NeoForge's loaded-mod file path, with code-source fallback;
 - resource-pack monitoring is recursive and debounced;
 - deletion/recreation of the resource-pack root is recovered;

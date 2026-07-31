@@ -169,6 +169,37 @@ class ContentScannerTest {
     }
 
     @Test
+    void nestedDocumentationLightmapPathIsNotBlockedAsAnActivePackPath() throws IOException {
+        Path packs = Files.createDirectories(temporaryDirectory.resolve("resourcepacks"));
+        writeZip(packs.resolve("documentation.zip"), Map.of(
+                "pack.mcmeta", "{\"pack\":{\"pack_format\":34,\"description\":\"documentation\"}}",
+                "docs/assets/minecraft/optifine/lightmap/world0.png", "example-only"
+        ));
+
+        ContentScanner.Report report = ContentScanner.scanResourcePacks(packs, productionPolicy(false));
+
+        assertFalse(report.hasBlockingFindings());
+    }
+
+    @Test
+    void oversizedMetadataWarnsOrBlocksAccordingToFailClosed() throws IOException {
+        Path mods = Files.createDirectories(temporaryDirectory.resolve("mods"));
+        String metadata = "[[mods]]\ndescription=\"" + "x".repeat(2_048)
+                + "\"\nmodId=\"fullbright\"\n";
+        writeZip(mods.resolve("oversized-metadata.jar"), Map.of(
+                "META-INF/neoforge.mods.toml", metadata
+        ));
+
+        ContentScanner.Report open = ContentScanner.scanMods(mods, productionPolicy(false, 1_024));
+        ContentScanner.Report closed = ContentScanner.scanMods(mods, productionPolicy(true, 1_024));
+
+        assertFalse(open.hasBlockingFindings());
+        assertTrue(open.findings().stream().anyMatch(finding -> finding.rule().equals("text_limit")));
+        assertTrue(closed.hasBlockingFindings());
+        assertTrue(closed.blockingFindings().stream().anyMatch(finding -> finding.rule().equals("text_limit")));
+    }
+
+    @Test
     void exactIgnoredArchivePathIsNotScanned() throws IOException {
         Path mods = Files.createDirectories(temporaryDirectory.resolve("mods"));
         Path ownArchive = mods.resolve("antifullbright.jar");
@@ -197,6 +228,10 @@ class ContentScannerTest {
     }
 
     private static ContentScanner.Policy productionPolicy(boolean failClosed) {
+        return productionPolicy(failClosed, 1_048_576);
+    }
+
+    private static ContentScanner.Policy productionPolicy(boolean failClosed, int maximumTextBytes) {
         return new ContentScanner.Policy(
                 ClientScanConfig.csv(ClientScanConfig.DEFAULT_BLOCKED_MOD_IDS),
                 ClientScanConfig.csv(ClientScanConfig.DEFAULT_SUSPICIOUS_MOD_TOKENS),
@@ -205,7 +240,7 @@ class ContentScannerTest {
                 ClientScanConfig.csv(ClientScanConfig.DEFAULT_BLOCKED_MOD_SHA256),
                 ClientScanConfig.csv(ClientScanConfig.DEFAULT_BLOCKED_RESOURCE_PACK_SHA256),
                 10_000,
-                1_048_576,
+                maximumTextBytes,
                 failClosed
         );
     }

@@ -165,7 +165,8 @@ Controlled installations that intentionally require fail-closed behavior may kee
 This policy is accepted when:
 
 - compiled defaults match this document;
-- unit tests lock the approved block and non-block boundaries;
+- unit tests lock the approved block and non-block boundaries, including root-prefix matching;
 - clean client startup still succeeds;
 - the prohibited OptiFine lightmap fixture still blocks at startup and runtime;
+- oversized metadata produces an explicit warning or block according to `failClosed`;
 - all project workflows pass at the exact policy head.

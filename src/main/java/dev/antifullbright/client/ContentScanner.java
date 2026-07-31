@@ -73,6 +73,8 @@ public final class ContentScanner {
         }
     }
 
+    private record TextRead(String text, boolean overLimit) {}
+
     public record Report(int modsScanned, int packsScanned, List<Finding> findings) {
         public Report {
             findings = List.copyOf(findings);
@@ -188,7 +190,11 @@ public final class ContentScanner {
                     }
 
                     if (!entry.isDirectory() && MOD_METADATA.contains(entryPath)) {
-                        String metadata = read(zip, entry, policy);
+                        TextRead metadataRead = read(zip, entry, policy);
+                        if (metadataRead.overLimit()) {
+                            return Optional.of(textLimit(policy, "mod", file, entryPath));
+                        }
+                        String metadata = metadataRead.text();
                         for (String modId : parseModIds(entryPath, metadata)) {
                             if (policy.blockedModIds().contains(modId)) {
                                 return Optional.of(block("mod", file, "blocked_mod_id", modId));
@@ -231,12 +237,16 @@ public final class ContentScanner {
                 ZipEntry entry = entries.next();
                 if (++count > policy.maximumEntries()) return Optional.of(limit(policy, "resourcepack", pack));
                 String entryPath = path(entry.getName());
-                Optional<String> signature = match(entryPath, policy.blockedPackPaths());
+                Optional<String> signature = matchPrefix(entryPath, policy.blockedPackPaths());
                 if (signature.isPresent()) {
                     return Optional.of(block("resourcepack", pack, "blocked_pack_path", signature.get()));
                 }
                 if (!entry.isDirectory() && entryPath.equals("pack.mcmeta") && warning.isEmpty()) {
-                    warning = match(lower(read(zip, entry, policy)), policy.suspiciousPackTokens())
+                    TextRead metadataRead = read(zip, entry, policy);
+                    if (metadataRead.overLimit()) {
+                        return Optional.of(textLimit(policy, "resourcepack", pack, entryPath));
+                    }
+                    warning = match(lower(metadataRead.text()), policy.suspiciousPackTokens())
                             .map(token -> warning("resourcepack", pack, "suspicious_metadata", token));
                 }
             }
@@ -255,18 +265,21 @@ public final class ContentScanner {
         for (Path current : paths) {
             if (Files.isSymbolicLink(current)) continue;
             String relative = path(pack.relativize(current).toString());
-            Optional<String> signature = match(relative, policy.blockedPackPaths());
+            Optional<String> signature = matchPrefix(relative, policy.blockedPackPaths());
             if (signature.isPresent()) {
                 return Optional.of(block("resourcepack", pack, "blocked_pack_path", signature.get()));
             }
             if (relative.equals("pack.mcmeta")
                     && warning.isEmpty()
                     && Files.isRegularFile(current, LinkOption.NOFOLLOW_LINKS)) {
-                String metadata;
+                TextRead metadataRead;
                 try (InputStream input = Files.newInputStream(current)) {
-                    metadata = lower(new String(input.readNBytes(policy.maximumTextBytes()), StandardCharsets.UTF_8));
+                    metadataRead = read(input, policy);
                 }
-                warning = match(metadata, policy.suspiciousPackTokens())
+                if (metadataRead.overLimit()) {
+                    return Optional.of(textLimit(policy, "resourcepack", pack, relative));
+                }
+                warning = match(lower(metadataRead.text()), policy.suspiciousPackTokens())
                         .map(token -> warning("resourcepack", pack, "suspicious_metadata", token));
             }
         }
@@ -316,10 +329,18 @@ public final class ContentScanner {
         if (VALID_MOD_ID.matcher(id).matches()) ids.add(id);
     }
 
-    private static String read(ZipFile zip, ZipEntry entry, Policy policy) throws IOException {
+    private static TextRead read(ZipFile zip, ZipEntry entry, Policy policy) throws IOException {
         try (InputStream input = zip.getInputStream(entry)) {
-            return new String(input.readNBytes(policy.maximumTextBytes()), StandardCharsets.UTF_8);
+            return read(input, policy);
         }
+    }
+
+    private static TextRead read(InputStream input, Policy policy) throws IOException {
+        int maximum = policy.maximumTextBytes();
+        byte[] bytes = input.readNBytes(maximum + 1);
+        boolean overLimit = bytes.length > maximum;
+        int length = Math.min(bytes.length, maximum);
+        return new TextRead(new String(bytes, 0, length, StandardCharsets.UTF_8), overLimit);
     }
 
     private static Optional<Finding> blockedHash(String category, Path target, Set<String> blocked) throws IOException {
@@ -367,6 +388,10 @@ public final class ContentScanner {
         return tokens.stream().filter(token -> !token.isEmpty() && value.contains(token)).findFirst();
     }
 
+    private static Optional<String> matchPrefix(String value, Set<String> prefixes) {
+        return prefixes.stream().filter(prefix -> !prefix.isEmpty() && value.startsWith(prefix)).findFirst();
+    }
+
     private static Finding block(String category, Path path, String rule, String token) {
         return new Finding(Severity.BLOCK, category, path, rule, "Matched: " + token);
     }
@@ -379,6 +404,12 @@ public final class ContentScanner {
         Severity severity = policy.failClosed() ? Severity.BLOCK : Severity.WARNING;
         return new Finding(severity, category, path, "entry_limit",
                 "Exceeded " + policy.maximumEntries() + " entries.");
+    }
+
+    private static Finding textLimit(Policy policy, String category, Path path, String metadataPath) {
+        Severity severity = policy.failClosed() ? Severity.BLOCK : Severity.WARNING;
+        return new Finding(severity, category, path, "text_limit",
+                "Exceeded " + policy.maximumTextBytes() + " bytes while reading " + metadataPath + ".");
     }
 
     private static Finding io(Policy policy, String category, Path path, IOException error) {
