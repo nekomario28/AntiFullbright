@@ -200,6 +200,23 @@ class ContentScannerTest {
     }
 
     @Test
+    void suspiciousPackNameCannotSuppressStrictMetadataLimit() throws IOException {
+        Path packs = Files.createDirectories(temporaryDirectory.resolve("resourcepacks"));
+        String metadata = "{\"pack\":{\"pack_format\":34,\"description\":\""
+                + "x".repeat(2_048) + "\"}}";
+        writeZip(packs.resolve("fullbright-named-but-oversized.zip"), Map.of(
+                "pack.mcmeta", metadata
+        ));
+
+        ContentScanner.Report report = ContentScanner.scanResourcePacks(
+                packs, productionPolicy(true, 1_024));
+
+        assertTrue(report.hasBlockingFindings());
+        assertTrue(report.blockingFindings().stream()
+                .anyMatch(finding -> finding.rule().equals("text_limit")));
+    }
+
+    @Test
     void exactIgnoredArchivePathIsNotScanned() throws IOException {
         Path mods = Files.createDirectories(temporaryDirectory.resolve("mods"));
         Path ownArchive = mods.resolve("antifullbright.jar");

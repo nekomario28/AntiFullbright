@@ -22,7 +22,7 @@ Regression tests cover both positive and negative boundaries:
 
 - an active OptiFine lightmap path still blocks;
 - a nested `docs/assets/minecraft/optifine/lightmap/` example does not block;
-- oversized loader metadata warns under fail-open and blocks under fail-closed;
+- oversized loader and resource-pack metadata warns under fail-open and blocks under fail-closed, even when a filename already generated a warning;
 - exact declared Mod IDs, ambiguous descriptions, dependency IDs, nested JSON IDs, malformed archives, and generic core-shader paths retain their approved behavior.
 
 The temporary patch-application workflows and scripts were deleted by the correction commit and are not part of the final PR diff.

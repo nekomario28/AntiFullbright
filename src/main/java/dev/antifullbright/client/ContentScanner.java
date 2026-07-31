@@ -241,13 +241,15 @@ public final class ContentScanner {
                 if (signature.isPresent()) {
                     return Optional.of(block("resourcepack", pack, "blocked_pack_path", signature.get()));
                 }
-                if (!entry.isDirectory() && entryPath.equals("pack.mcmeta") && warning.isEmpty()) {
+                if (!entry.isDirectory() && entryPath.equals("pack.mcmeta")) {
                     TextRead metadataRead = read(zip, entry, policy);
                     if (metadataRead.overLimit()) {
                         return Optional.of(textLimit(policy, "resourcepack", pack, entryPath));
                     }
-                    warning = match(lower(metadataRead.text()), policy.suspiciousPackTokens())
-                            .map(token -> warning("resourcepack", pack, "suspicious_metadata", token));
+                    if (warning.isEmpty()) {
+                        warning = match(lower(metadataRead.text()), policy.suspiciousPackTokens())
+                                .map(token -> warning("resourcepack", pack, "suspicious_metadata", token));
+                    }
                 }
             }
         }
@@ -270,7 +272,6 @@ public final class ContentScanner {
                 return Optional.of(block("resourcepack", pack, "blocked_pack_path", signature.get()));
             }
             if (relative.equals("pack.mcmeta")
-                    && warning.isEmpty()
                     && Files.isRegularFile(current, LinkOption.NOFOLLOW_LINKS)) {
                 TextRead metadataRead;
                 try (InputStream input = Files.newInputStream(current)) {
@@ -279,8 +280,10 @@ public final class ContentScanner {
                 if (metadataRead.overLimit()) {
                     return Optional.of(textLimit(policy, "resourcepack", pack, relative));
                 }
-                warning = match(lower(metadataRead.text()), policy.suspiciousPackTokens())
-                        .map(token -> warning("resourcepack", pack, "suspicious_metadata", token));
+                if (warning.isEmpty()) {
+                    warning = match(lower(metadataRead.text()), policy.suspiciousPackTokens())
+                            .map(token -> warning("resourcepack", pack, "suspicious_metadata", token));
+                }
             }
         }
         return warning;
