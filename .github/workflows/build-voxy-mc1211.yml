@@ -1,0 +1,72 @@
+name: Build Voxy mc_1211
+
+on:
+  push:
+    branches:
+      - build/voxy-mc_1211-f308c254
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out exact Voxy source
+        uses: actions/checkout@v4
+        with:
+          repository: m3t4f1v3/voxy
+          ref: f308c254fafc23bdcc250ba3f1e5c6a7585f08d0
+          fetch-depth: 1
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Verify source and build
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "f308c254fafc23bdcc250ba3f1e5c6a7585f08d0"
+          chmod +x gradlew
+          ./gradlew --no-daemon clean build
+
+      - name: Validate and package mod JAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifact
+          mapfile -t jars < <(find build/libs -maxdepth 1 -type f -name 'voxy-*.jar' ! -name '*-dev.jar' ! -name '*-sources.jar' | sort)
+          test "${#jars[@]}" -eq 1
+          src="${jars[0]}"
+          out="artifact/voxy-0.2.14-alpha-mc1.21.1-fabric-f308c254.jar"
+          cp "$src" "$out"
+          unzip -p "$out" fabric.mod.json > artifact/fabric.mod.json
+          grep -q '"id"[[:space:]]*:[[:space:]]*"voxy"' artifact/fabric.mod.json
+          grep -q '"version"[[:space:]]*:[[:space:]]*"0.2.14-alpha"' artifact/fabric.mod.json
+          jar tf "$out" > artifact/jar-contents.txt
+          sha256sum "$out" > artifact/SHA256SUMS.txt
+          {
+            echo 'repository=m3t4f1v3/voxy'
+            echo 'branch=mc_1211'
+            echo 'commit=f308c254fafc23bdcc250ba3f1e5c6a7585f08d0'
+            echo 'minecraft=1.21.1'
+            echo 'loader=fabric'
+            echo 'java=21'
+          } > artifact/build-info.txt
+
+      - name: Upload Voxy JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: voxy-0.2.14-alpha-mc1.21.1-fabric-f308c254
+          path: artifact/
+          if-no-files-found: error
+          retention-days: 7
