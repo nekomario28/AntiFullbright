@@ -2,31 +2,31 @@
 
 [English documentation](README.md)
 
-Minecraft 1.21.1 / NeoForge 21.1.235 向けの Mod です。
+Minecraft 1.21.1 / NeoForge 21.1.235 向けのModです。
 
-- サーバー側機能は Fullbright の使用を断定せず、プレイヤー本人による「完全な暗所での長時間採掘」を段階的に警告します。
+- サーバー側機能はFullbrightの使用を断定せず、プレイヤー本人による「完全な暗所での長時間採掘」を段階的に警告します。
 - 任意導入のクライアント側betaスキャナーは、Client Setup時にローカルMODとリソースパックを検査し、起動後のリソースパック変更も監視します。
 
-Mod ID は `antifullbright` です。クライアントスキャナーは現在 `1.1.0-beta.1` 段階であり、改変不能なアンチチートではありません。
+Mod IDは`antifullbright`です。クライアントスキャナーは現在`1.1.0-beta.1`段階であり、改変不能なアンチチートではありません。
 
 ## ビルドと導入
 
-Java 21 を使用します。
+Java 21を使用します。
 
 ```bash
 ./gradlew build
 ```
 
-beta成果物は `build/libs/antifullbright-1.1.0-beta.1.jar` です。
+beta成果物は`build/libs/antifullbright-1.1.0-beta.1.jar`です。
 
-- サーバー側の暗所採掘検知には、サーバーの `mods` ディレクトリへ導入します。
-- ローカルスキャナーが必要な場合だけ、同じJARをクライアントの `mods` にも導入します。
+- サーバー側の暗所採掘検知には、サーバーの`mods`ディレクトリへ導入します。
+- ローカルスキャナーが必要な場合だけ、同じJARをクライアントの`mods`にも導入します。
 
 サーバー側検知はクライアントへ導入しなくても動作します。このbetaには、スキャナーの導入や検査結果の真正性を証明するサーバーハンドシェイクはありません。
 
 ## サーバー側の検出動作
 
-- `BlockEvent.BreakEvent` のうち、実プレイヤーが対象タグの自然ブロックを破壊した場合だけを記録します。
+- `BlockEvent.BreakEvent`のうち、実プレイヤーが対象タグの自然ブロックを破壊した場合だけを記録します。
 - FakePlayer、クリエイティブ、スペクテイター、既定ではOP、暗視効果中、目の位置が水中のプレイヤーを除外します。
 - プレイヤーの目と破壊位置の両方で、ブロック光・天空光が設定値と一致する必要があります。
 - 未ロードチャンクの光は読みません。
@@ -40,9 +40,9 @@ beta成果物は `build/libs/antifullbright-1.1.0-beta.1.jar` です。
 
 ## サーバー設定
 
-初回起動後の `config/antifullbright-server.toml` で全項目を変更できます。
+初回起動後の`config/antifullbright-server.toml`で全項目を変更できます。
 
-- `language`（`ja_jp` または `en_us`。既定値 `en_us`）
+- `language`（`ja_jp`または`en_us`。既定値`en_us`）
 - `enabled`
 - `maximumY`
 - `requiredBlockLight`
@@ -63,11 +63,11 @@ beta成果物は `build/libs/antifullbright-1.1.0-beta.1.jar` です。
 - `placedBlockTrackingExpirationMinutes`
 - `placedBlockTrackingMaximumEntriesPerPlayer`
 
-`/darkmining reload` はこのファイルを同期的に再読込します。値は定義済みの安全な範囲へ制限されます。
+`/darkmining reload`はこのファイルを同期的に再読込します。値は定義済みの安全な範囲へ制限されます。
 
 ### 表示言語
 
-警告、キック理由、OP通知、管理コマンドの結果は `language` で切り替えます。
+警告、キック理由、OP通知、管理コマンドの結果は`language`で切り替えます。
 
 ```toml
 # English
@@ -77,51 +77,61 @@ language = "en_us"
 language = "ja_jp"
 ```
 
-変更後に `/darkmining reload` を実行してください。サーバー側検知では、サーバーが翻訳済みの文章を送信します。
+変更後に`/darkmining reload`を実行してください。サーバー側検知では、サーバーが翻訳済みの文章を送信します。
 
 ## クライアントスキャナーbeta
 
-検査は `FMLClientSetupEvent` で実行します。通常のクライアント起動完了を阻止できますが、検査前に他MODの初期化コードが一切動かないことまでは保証しません。
+検査は`FMLClientSetupEvent`で実行します。通常のクライアント起動完了を阻止できますが、検査前に他MODの初期化コードが一切動かないことまでは保証しません。
 
-`mods` 直下の `.jar`／`.zip`、`resourcepacks` 直下のZIP形式／展開済みフォルダ、設定されたハッシュを検査します。
+`mods`直下の`.jar`／`.zip`、`resourcepacks`直下のZIP形式／展開済みフォルダ、設定されたハッシュを検査します。
 
-### 強制ブロック判定
+正式な公開既定ポリシーは[`antifullbright/default-v1`](docs/production-blocking-policy-1.1.0.md)として版管理します。基本原則は、**正確で確度の高い証拠だけをBLOCKし、広い名称・説明文・不確実な読込失敗はWARNINGに留める**ことです。
 
-次は強制ブロックになります。
+### 既定の強制ブロック判定
 
-- `blockedModIds` に登録した正確なMod ID
-- `blockedModSha256` または `blockedResourcePackSha256` に登録したSHA-256
-- `blockedResourcePackPaths` に登録したリソースパック内部パス
-- `failClosed = true` のときの読込不能、壊れたアーカイブ、上限超過
+通常の既定設定でBLOCKするのは次だけです。
 
-実行中のAntiFullbright本体は、実際のコードソースパスと完全一致するファイルだけを除外します。別のJARが同じMod IDを名乗ってもスキャン回避にはなりません。
+- loader metadata内の正確な宣言Mod ID `fullbright`。
+- `blockedModSha256`または`blockedResourcePackSha256`へ管理者が明示追加した完全一致SHA-256。
+- 次の正確なリソースパック内部パスprefix。
+  - `assets/minecraft/optifine/lightmap/`
+  - `assets/minecraft/mcpatcher/lightmap/`
+- 管理された環境が明示的に`failClosed = true`へ変更した場合の、読込不能・壊れたアーカイブ・上限超過。
 
-### 警告判定
+配布時のSHA-256一覧は空です。ハッシュはビルドやバージョンごとに変わるため、利用する運用側が根拠とともに管理します。
 
-`suspiciousModTokens` と `suspiciousResourcePackTokens` は警告だけを生成します。例えば「fullbright互換機能を無効化する」という無害な説明にも同じ単語が含まれるため、曖昧な部分一致だけでは起動を止めません。
+実行中のAntiFullbright本体は、NeoForgeが報告する実際の読込ファイルパスを優先し、コードソースを補助として除外します。別のJARが同じMod IDを名乗ってもスキャン回避にはなりません。
+
+### 既定の警告判定
+
+`suspiciousModTokens`と`suspiciousResourcePackTokens`は警告だけを生成します。Fullbright、Gamma Bright、Gamma Utils、True Fullbright、Fullbright Utils、Resource Gamma Utils、Boosted Brightness、Night Vision等の名称表記が対象です。
+
+ファイル名、表示名、説明文、依存宣言、入れ子の独自ID、広いshader pathだけでは既定BLOCKにしません。例えば「Fullbright互換機能を無効化する」という無害な説明はWARNINGに留まります。
+
+`assets/minecraft/shaders/core/`のような一般的なcore shader pathは、Fullbright固有の証拠として広すぎるため既定BLOCKから除外しています。
 
 ### リソースパック変更監視
 
-`watchResourcePacks = true` の場合、Java `WatchService` で `resourcepacks` 以下を再帰監視します。
+`watchResourcePacks = true`の場合、Java `WatchService`で`resourcepacks`以下を再帰監視します。
 
-- 作成・変更・削除・OVERFLOW後に、デバウンス付きの全体再スキャンを実行
-- 新しく作られたサブディレクトリも監視対象へ登録
-- `resourcepacks` 自体が削除・再作成された場合も親ディレクトリから監視を復旧
-- 実行中に強制ブロックを検出した場合はMinecraftのメインスレッドへ処理を渡す
-- 通常の切断経路で現在のワールドを離れ、ブロック理由画面を表示
-- JVMを直接強制終了しない
+- 作成・変更・削除・OVERFLOW後に、デバウンス付きの全体再スキャンを実行します。
+- 新しく作られたサブディレクトリも監視対象へ登録します。
+- `resourcepacks`自体が削除・再作成された場合も親ディレクトリから監視を復旧します。
+- 実行中に強制ブロックを検出した場合はMinecraftのメインスレッドへ処理を渡します。
+- 通常の切断経路で現在のワールドを離れ、ブロック理由画面を表示します。
+- JVMを直接強制終了しません。
 
 `WatchService`は変更通知の補助であり、完全なセキュリティ境界ではありません。後続フェーズでは、サーバー接続直前とリソースパック選択変更後にも再スキャンする必要があります。
 
 ## クライアント設定
 
-初回クライアント起動後の `config/antifullbright-client.toml` で変更できます。
+初回クライアント起動後の`config/antifullbright-client.toml`で変更できます。
 
 - `enabled`
 - `scanMods`
 - `scanResourcePacks`
 - `watchResourcePacks`
-- `failClosed`
+- `failClosed`（公開既定値`false`）
 - `disconnectOnRuntimeDetection`
 - `watchDebounceMillis`
 - `maximumArchiveEntries`
@@ -133,7 +143,18 @@ language = "ja_jp"
 - `blockedModSha256`
 - `blockedResourcePackSha256`
 
-識別子・トークンはカンマ区切りで、英字の大文字・小文字を区別しません。ハッシュは64桁の16進SHA-256で、任意で `sha256:` を先頭につけられます。
+識別子・トークンはカンマ区切りで、英字の大文字・小文字を区別しません。ハッシュは64桁の16進SHA-256で、任意で`sha256:`を先頭につけられます。
+
+### 既存beta設定からの移行
+
+コンパイル済みの既定値が変わっても、NeoForgeは既存のクライアント設定を上書きしません。`config/antifullbright-client.toml`をバックアップして削除し再生成するか、次のように手動修正してください。
+
+```toml
+failClosed = false
+blockedResourcePackPaths = "assets/minecraft/optifine/lightmap/,assets/minecraft/mcpatcher/lightmap/"
+```
+
+管理された専用環境では、意図的に`failClosed = true`を維持しても構いません。ただし、それは公開既定値ではなく運用上の上書きです。
 
 ### プライバシーと強制範囲
 
@@ -153,7 +174,7 @@ language = "ja_jp"
 - `data/antifullbright/tags/item/dark_mining_light_sources.json`
 - `data/antifullbright/tags/block/dark_mining_counted_blocks.json`
 
-同じIDのタグをデータパックから追加できます。NeoForgeの `remove` 配列を使えば組み込み対象の削除もできます。他Modの要素は `{ "id": "othermod:item", "required": false }` の形式を推奨します。
+同じIDのタグをデータパックから追加できます。NeoForgeの`remove`配列を使えば組み込み対象の削除もできます。他Modの要素は`{ "id": "othermod:item", "required": false }`の形式を推奨します。
 
 ## 管理コマンド
 
@@ -167,13 +188,13 @@ language = "ja_jp"
 /darkmining debug <player>
 ```
 
-`reset` は警告と現在セッションをリセットします。`debug` はY、目・足元の光、セッション時間、破壊数、光源所持猶予、警告状態、現在の除外理由を表示します。
+`reset`は警告と現在セッションをリセットします。`debug`はY、目・足元の光、セッション時間、破壊数、光源所持猶予、警告状態、現在の除外理由を表示します。
 
 ## 永続化とログ
 
-警告回数と最終警告時刻はUUIDをキーにOverworldのSavedData (`antifullbright_warnings.dat`) へ保存されます。既定では新しい警告が30分なければ、参照時または次回警告時に経過時間分だけ段階的に減衰します。
+警告回数と最終警告時刻はUUIDをキーにOverworldのSavedData（`antifullbright_warnings.dat`）へ保存されます。既定では新しい警告が30分なければ、参照時または次回警告時に経過時間分だけ段階的に減衰します。
 
-警告・キックの証拠は通常ロガーへ出し、`logs/dark-mining-detections.jsonl` に1イベント1行で非同期追記します。
+警告・キックの証拠は通常ロガーへ出し、`logs/dark-mining-detections.jsonl`に1イベント1行で非同期追記します。
 
 ## セキュリティ上の限界
 
@@ -184,4 +205,4 @@ language = "ja_jp"
 - 通常のサーバーMODだけでは、クライアントが管理する情報を完全には信頼できません。
 - 厳格な運用では、専用ランチャー、署名済みマニフェスト、既存のサーバー側行動検知を併用してください。
 
-通常のランチャー管理下にあるNeoForgeクライアントプロファイルで生成JARを確認し、アイコンと最終ポリシーを確定するまで、`1.1.0`正式版として公開しません。
+外部ランチャー管理プロファイル、アイコン、実再起動永続化、本番用既定ポリシーの各ゲートは完了しました。`1.1.0`正式版には、最終exact-head reviewとリリース認可が引き続き必要です。
