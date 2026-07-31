@@ -1,0 +1,90 @@
+name: Build Voxy NeoForge 1.21.1
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out build carrier
+        uses: actions/checkout@v4
+
+      - name: Check out exact Voxy NeoForge source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --no-checkout https://github.com/j-shelfwood/voxy-neoforge.git source
+          cd source
+          git checkout --detach 89636aa8261f46c6e31c14f2d9a55a9e40b93f59
+          test "$(git rev-parse HEAD)" = "89636aa8261f46c6e31c14f2d9a55a9e40b93f59"
+          git status --short
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v3
+        with:
+          min-wrapper-count: 1
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build exact source
+        working-directory: source
+        shell: bash
+        env:
+          GITHUB_ACTIONS: 'true'
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew clean build --no-daemon --stacktrace --console=plain
+
+      - name: Validate outputs and create evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          find source/build/libs -maxdepth 1 -type f -name '*.jar' -print | sort | tee evidence/jars.txt
+          test -s evidence/jars.txt
+
+          while IFS= read -r jar; do
+            unzip -t "$jar" >/dev/null
+            unzip -l "$jar" | grep -q 'META-INF/neoforge.mods.toml'
+            if unzip -l "$jar" | grep -q 'fabric.mod.json'; then
+              echo "Unexpected Fabric metadata in $jar" >&2
+              exit 1
+            fi
+          done < evidence/jars.txt
+
+          sha256sum $(cat evidence/jars.txt) | tee evidence/SHA256SUMS
+          printf '%s\n' \
+            'repository=j-shelfwood/voxy-neoforge' \
+            'branch=neoforge-1.21.1' \
+            'commit=89636aa8261f46c6e31c14f2d9a55a9e40b93f59' \
+            'minecraft=1.21.1' \
+            'neoforge=21.1.217' \
+            'java=21' \
+            'mod_version=0.2.9-alpha' > evidence/build-manifest.txt
+
+      - name: Upload private-use build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: voxy-neoforge-0.2.9-alpha-mc1.21.1-89636aa
+          path: |
+            source/build/libs/*.jar
+            evidence/*
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 0
