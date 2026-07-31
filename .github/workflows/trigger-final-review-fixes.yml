@@ -1,0 +1,45 @@
+name: Trigger final scanner review fixes
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fixes:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out review branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/client-content-scanner
+          fetch-depth: 0
+
+      - name: Execute reviewed fix script
+        shell: bash
+        run: |
+          python3 - <<'PYRUN'
+          from pathlib import Path
+          import textwrap
+
+          source_path = Path('.github/workflows/apply-final-review-fixes.yml')
+          source = source_path.read_text()
+          marker = "          python3 - <<'PY'\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n          PY\n", start)
+          script = textwrap.dedent(source[start:end])
+          exec(compile(script, str(source_path), 'exec'))
+          PYRUN
+          rm -f .github/workflows/trigger-final-review-fixes.yml
+
+      - name: Commit reviewed fixes
+        shell: bash
+        run: |
+          git config user.name "nekomario28"
+          git config user.email "206304251+nekomario28@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "fix: enforce precise scanner policy boundaries"
+          git push origin HEAD:agent/client-content-scanner
