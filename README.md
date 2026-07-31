@@ -205,4 +205,4 @@ This client scanner is not tamper-proof.
 - A normal server mod cannot fully trust data controlled by the client.
 - Strict deployments should combine a controlled launcher, signed manifests, and the existing server-side behavioral detector.
 
-The external launcher-managed profile, project icon, real restart persistence, and production default policy gates have been completed. The policy head `fb2531eb689d6062c43776ca1e0cb4fa5b59b7bd` passed Build, GameTest, Packaged Server, and External Runtime. Stable `1.1.0` still requires final exact-head review and release authorization.
+The external launcher-managed profile, project icon, real restart persistence, and production default policy gates have been completed. Stable `1.1.0` still requires final exact-head review and release authorization.
