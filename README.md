@@ -85,31 +85,41 @@ The scanner runs during `FMLClientSetupEvent`. It can prevent normal client star
 
 The scanner inspects `.jar` and `.zip` files directly inside `mods`, ZIP packs and unpacked directories directly inside `resourcepacks`, and configured hashes.
 
-### Blocking findings
+The approved public default is versioned as [`antifullbright/default-v1`](docs/production-blocking-policy-1.1.0.md). Its core rule is: **BLOCK only on precise, high-confidence evidence; report broad names, descriptions, and uncertain scan failures as WARNING.**
 
-The following produce blocking findings:
+### Default blocking findings
 
-- exact Mod IDs listed in `blockedModIds`
-- SHA-256 hashes listed in `blockedModSha256` or `blockedResourcePackSha256`
-- resource-pack paths listed in `blockedResourcePackPaths`
-- unreadable, malformed, or over-limit content when `failClosed = true`
+A default installation blocks only:
 
-The running AntiFullbright archive is ignored only by its actual code-source path. Another archive cannot bypass scanning merely by claiming the same Mod ID.
+- the exact authoritative loader Mod ID `fullbright`;
+- an exact SHA-256 explicitly added to `blockedModSha256` or `blockedResourcePackSha256`;
+- either precise resource-pack prefix:
+  - `assets/minecraft/optifine/lightmap/`
+  - `assets/minecraft/mcpatcher/lightmap/`;
+- unreadable, malformed, or over-limit content only when a controlled deployment explicitly changes `failClosed = true`.
 
-### Warning findings
+The distributed SHA-256 lists are empty. Hashes are version-specific and must be maintained by the deployment that chooses to use them.
 
-Tokens in `suspiciousModTokens` and `suspiciousResourcePackTokens` produce warnings only. They do not block startup because a harmless description such as “disables fullbright compatibility” can legitimately contain the same words.
+The running AntiFullbright archive is ignored only by its actual loaded-mod path, with code-source fallback. Another archive cannot bypass scanning merely by claiming the same Mod ID.
+
+### Default warning findings
+
+Tokens in `suspiciousModTokens` and `suspiciousResourcePackTokens` produce warnings only. This includes Fullbright, Gamma Bright, Gamma Utils, True Fullbright, Fullbright Utils, Resource Gamma Utils, Boosted Brightness, and Night Vision naming variants.
+
+A filename, display name, description, dependency declaration, nested custom ID, or broad shader path is not sufficient for a default block. For example, a harmless description such as “disables Fullbright compatibility” remains warning-only.
+
+The generic `assets/minecraft/shaders/core/` path is intentionally not blocked. It is too broad to serve as a Fullbright-specific signature.
 
 ### Resource-pack monitoring
 
 When `watchResourcePacks = true`, Java `WatchService` recursively monitors `resourcepacks`.
 
-- create, modify, delete, and overflow conditions trigger a debounced full rescan
-- newly created subdirectories are registered
-- deletion and recreation of `resourcepacks` itself is recovered through a parent-directory watch
-- a runtime blocking finding is handled on the Minecraft main thread
-- the current world is left through Minecraft's normal disconnect path and a blocking screen is displayed
-- the JVM is not terminated directly
+- create, modify, delete, and overflow conditions trigger a debounced full rescan;
+- newly created subdirectories are registered;
+- deletion and recreation of `resourcepacks` itself is recovered through a parent-directory watch;
+- a runtime blocking finding is handled on the Minecraft main thread;
+- the current world is left through Minecraft's normal disconnect path and a blocking screen is displayed;
+- the JVM is not terminated directly.
 
 `WatchService` is a change-notification aid, not a complete security boundary. A future phase should also rescan immediately before server connection and after resource-pack selection changes.
 
@@ -121,7 +131,7 @@ Settings are generated in `config/antifullbright-client.toml`:
 - `scanMods`
 - `scanResourcePacks`
 - `watchResourcePacks`
-- `failClosed`
+- `failClosed` (public default `false`)
 - `disconnectOnRuntimeDetection`
 - `watchDebounceMillis`
 - `maximumArchiveEntries`
@@ -135,13 +145,24 @@ Settings are generated in `config/antifullbright-client.toml`:
 
 Comma-separated identifiers and tokens are compared case-insensitively. Hashes are 64 hexadecimal SHA-256 values with an optional `sha256:` prefix.
 
+### Upgrading an existing beta configuration
+
+NeoForge does not overwrite an existing client configuration when compiled defaults change. Back up and delete `config/antifullbright-client.toml` to regenerate it, or edit it manually:
+
+```toml
+failClosed = false
+blockedResourcePackPaths = "assets/minecraft/optifine/lightmap/,assets/minecraft/mcpatcher/lightmap/"
+```
+
+A controlled installation may deliberately retain `failClosed = true`; that is a deployment override, not the public default.
+
 ### Privacy and enforcement scope
 
 This beta does not transmit scanned file contents, filenames, local paths, hashes, or scan results over the network. Classification remains inside the client and is shown only in local logs and the blocking screen.
 
 Local logs or crash reports may contain paths to affected files. Review and redact paths containing account names, home directories, or other private information before sharing those files with third parties.
 
-These settings are controlled by the player’s local client. The server cannot currently fix or verify the enabled state or policy content, so this beta must not be treated as server-enforced anti-cheat.
+These settings are controlled by the player's local client. The server cannot currently fix or verify the enabled state or policy content, so this beta must not be treated as server-enforced anti-cheat.
 
 ## Data-pack tags
 
@@ -184,4 +205,4 @@ This client scanner is not tamper-proof.
 - A normal server mod cannot fully trust data controlled by the client.
 - Strict deployments should combine a controlled launcher, signed manifests, and the existing server-side behavioral detector.
 
-Do not publish stable `1.1.0` until the generated JAR has been tested in a normal launcher-managed NeoForge client profile and the icon and final policy have been approved.
+The external launcher-managed profile, project icon, real restart persistence, and production default policy gates have been completed. Stable `1.1.0` still requires final exact-head review and release authorization.
