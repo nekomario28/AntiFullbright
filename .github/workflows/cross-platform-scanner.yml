@@ -66,11 +66,12 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
 
-      - name: Set up Java 21
+      - name: Set up Java 21 and restore Gradle cache
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
+          cache: gradle
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
@@ -80,17 +81,14 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
-      - name: Populate a fresh project-only Gradle home
+      - name: Verify build with the proven cache
         shell: bash
         run: |
-          export EXPORT_GRADLE_HOME="${RUNNER_TEMP}/antifullbright-gradle-home"
-          rm -rf "${EXPORT_GRADLE_HOME}"
-          mkdir -p "${EXPORT_GRADLE_HOME}"
-          GRADLE_USER_HOME="${EXPORT_GRADLE_HOME}" ./gradlew clean build --no-daemon
-          rm -rf "${EXPORT_GRADLE_HOME}/daemon" \
-                 "${EXPORT_GRADLE_HOME}/workers" \
-                 "${EXPORT_GRADLE_HOME}/notifications"
-          du -sh "${EXPORT_GRADLE_HOME}"
+          ./gradlew build --no-daemon
+          rm -rf "${HOME}/.gradle/daemon" \
+                 "${HOME}/.gradle/workers" \
+                 "${HOME}/.gradle/notifications"
+          du -sh "${HOME}/.gradle"
 
       - name: Prepare Mineflayer dependencies
         shell: bash
@@ -121,7 +119,6 @@ jobs:
       - name: Assemble exact source and offline runtime bundle
         shell: bash
         run: |
-          export EXPORT_GRADLE_HOME="${RUNNER_TEMP}/antifullbright-gradle-home"
           rm -rf local-offline-bundle
           mkdir -p local-offline-bundle/source local-offline-bundle/gradle-home local-offline-bundle/runtime
           rsync -a ./ local-offline-bundle/source/ \
@@ -131,7 +128,7 @@ jobs:
             --exclude 'run/' \
             --exclude 'offline-runtime/' \
             --exclude 'local-offline-bundle/'
-          rsync -a "${EXPORT_GRADLE_HOME}/" local-offline-bundle/gradle-home/
+          rsync -a "${HOME}/.gradle/" local-offline-bundle/gradle-home/
           rsync -a offline-runtime/ local-offline-bundle/runtime/
           cat > local-offline-bundle/run-local-verification.sh <<'SCRIPT'
           #!/usr/bin/env bash
