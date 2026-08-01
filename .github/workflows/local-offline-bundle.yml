@@ -4,6 +4,8 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - '.github/local-offline-export.request'
 
 permissions:
   contents: read
