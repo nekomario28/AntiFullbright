@@ -1,2 +1,3 @@
-target=6844baf9be7556cec890625a724764070fc48998
+target=7924da758038e409c8d1e2b2c13a2b8cccc2870d
 purpose=independent-local-container-verification
+mode=repack-existing-successful-bundle
