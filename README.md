@@ -5,9 +5,9 @@
 Anti Fullbright is a Minecraft 1.21.1 / NeoForge 21.1.235 mod.
 
 - The server-side feature does not claim to identify Fullbright directly. It progressively warns players who mine for an extended period in complete darkness.
-- The optional client-side beta scanner checks local mods and resource packs during client setup and monitors later resource-pack changes.
+- The optional client-side scanner checks local mods and resource packs during client setup and monitors later resource-pack changes.
 
-The Mod ID is `antifullbright`. The client scanner is currently a `1.1.0-beta.1` feature and is not a tamper-proof anti-cheat.
+The Mod ID is `antifullbright`. The client scanner is included in `1.1.0` and is not a tamper-proof anti-cheat.
 
 ## Building and installation
 
@@ -17,12 +17,12 @@ Use Java 21.
 ./gradlew build
 ```
 
-The beta artifact is `build/libs/antifullbright-1.1.0-beta.1.jar`.
+The stable artifact is `build/libs/antifullbright-1.1.0.jar`.
 
 - Install it in the server `mods` directory for server-side dark-mining detection.
 - Install the same JAR in the client `mods` directory only when the local scanner is required.
 
-The server-side detector still works without client installation. This beta does not contain a server handshake that proves the scanner is installed or that a scan result is genuine.
+The server-side detector still works without client installation. This release does not contain a server handshake that proves the scanner is installed or that a scan result is genuine.
 
 ## Server-side detection behavior
 
@@ -79,7 +79,7 @@ language = "ja_jp"
 
 Run `/darkmining reload` after changing it. The server sends fully rendered text, so client language resources are not required for the server-side detector.
 
-## Client scanner beta
+## Client scanner
 
 The scanner runs during `FMLClientSetupEvent`. It can prevent normal client startup from completing, but it does **not** guarantee that every other mod was prevented from executing any initialization code before the scan.
 
@@ -158,11 +158,11 @@ A controlled installation may deliberately retain `failClosed = true`; that is a
 
 ### Privacy and enforcement scope
 
-This beta does not transmit scanned file contents, filenames, local paths, hashes, or scan results over the network. Classification remains inside the client and is shown only in local logs and the blocking screen.
+This release does not transmit scanned file contents, filenames, local paths, hashes, or scan results over the network. Classification remains inside the client and is shown only in local logs and the blocking screen.
 
 Local logs or crash reports may contain paths to affected files. Review and redact paths containing account names, home directories, or other private information before sharing those files with third parties.
 
-These settings are controlled by the player's local client. The server cannot currently fix or verify the enabled state or policy content, so this beta must not be treated as server-enforced anti-cheat.
+These settings are controlled by the player's local client. The server cannot currently fix or verify the enabled state or policy content, so this release must not be treated as server-enforced anti-cheat.
 
 ## Data-pack tags
 
@@ -205,4 +205,4 @@ This client scanner is not tamper-proof.
 - A normal server mod cannot fully trust data controlled by the client.
 - Strict deployments should combine a controlled launcher, signed manifests, and the existing server-side behavioral detector.
 
-The external launcher-managed profile, project icon, real restart persistence, and production default policy gates have been completed. Stable `1.1.0` still requires final exact-head review and release authorization.
+Stable `1.1.0` artifacts must be published from the exact reviewed release-candidate JAR without rebuilding it after approval. See `CHANGELOG.md` and the release evidence documents.

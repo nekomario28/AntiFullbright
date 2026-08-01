@@ -30,7 +30,7 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
-      - name: Build exact beta JAR
+      - name: Build exact candidate JAR
         run: ./gradlew clean build --no-daemon
 
       - name: Install launcher runtime dependencies
@@ -82,7 +82,7 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
-      - name: Build exact beta JAR
+      - name: Build exact candidate JAR
         run: ./gradlew clean build --no-daemon
 
       - name: Install protocol test client
@@ -135,7 +135,7 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
-      - name: Build exact beta JAR
+      - name: Build exact candidate JAR
         run: ./gradlew clean build --no-daemon
 
       - name: Install protocol test client

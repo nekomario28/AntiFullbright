@@ -2,7 +2,7 @@
 set -euo pipefail
 
 readonly NEOFORGE_VERSION="21.1.235"
-readonly MOD_VERSION="1.1.0-beta.1"
+readonly MOD_VERSION="1.1.0"
 readonly INSTALLER="neoforge-${NEOFORGE_VERSION}-installer.jar"
 readonly INSTALLER_BASE="https://maven.neoforged.net/releases/net/neoforged/neoforge/${NEOFORGE_VERSION}"
 readonly SERVER_DIR="restart-persistence-server"

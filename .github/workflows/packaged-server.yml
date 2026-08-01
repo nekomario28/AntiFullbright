@@ -25,10 +25,10 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v4
 
-      - name: Build beta JAR
+      - name: Build candidate JAR
         run: ./gradlew clean build --no-daemon
 
-      - name: Verify GameTest isolation from beta JAR
+      - name: Verify GameTest isolation from candidate JAR
         shell: bash
         run: |
           jar_file="$(find build/libs -maxdepth 1 -type f -name 'antifullbright-*.jar' -print -quit)"
@@ -39,7 +39,7 @@ jobs:
 
           jar tf "$jar_file" > packaged-jar-entries.txt
           if grep -Eq 'ServerContractGameTests|AdvancedDarkMiningGameTests|PlacementCapacityGameTests|CommandExecutionGameTests|src/gameTest|data/antifullbright/structure/' packaged-jar-entries.txt; then
-            echo 'GameTest-only code or resources leaked into the beta JAR.'
+            echo 'GameTest-only code or resources leaked into the candidate JAR.'
             cat packaged-jar-entries.txt
             exit 1
           fi

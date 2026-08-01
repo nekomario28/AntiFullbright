@@ -7,7 +7,7 @@
 - Scope: client-local scanner defaults
 - Minecraft: `1.21.1`
 - NeoForge: `21.1.235`
-- Candidate implementation: `1.1.0-beta.1`
+- Stable implementation: `1.1.0`
 
 This policy defines the rules shipped as AntiFullbright's default client configuration. It does not create server-side attestation: players can remove the scanner, alter its configuration, or modify the client. The existing server-side dark-mining detector remains the independently useful enforcement layer.
 
