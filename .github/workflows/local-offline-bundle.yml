@@ -1,0 +1,117 @@
+name: Local Offline Bundle
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      EXPORT_GRADLE_HOME: ${{ runner.temp }}/antifullbright-gradle-home
+
+    steps:
+      - name: Check out exact branch head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Populate a fresh project-only Gradle home
+        shell: bash
+        run: |
+          rm -rf "${EXPORT_GRADLE_HOME}"
+          mkdir -p "${EXPORT_GRADLE_HOME}"
+          GRADLE_USER_HOME="${EXPORT_GRADLE_HOME}" ./gradlew clean build --no-daemon
+          rm -rf "${EXPORT_GRADLE_HOME}/daemon" \
+                 "${EXPORT_GRADLE_HOME}/workers" \
+                 "${EXPORT_GRADLE_HOME}/notifications"
+          du -sh "${EXPORT_GRADLE_HOME}"
+
+      - name: Prepare Mineflayer dependencies
+        shell: bash
+        run: |
+          mkdir -p offline-runtime/node
+          cd offline-runtime/node
+          npm init -y >/dev/null
+          npm install --no-save --ignore-scripts mineflayer@4.37.1
+          node -e "console.log('mineflayer=' + require('mineflayer/package.json').version)"
+
+      - name: Prepare an installed NeoForge server template
+        shell: bash
+        run: |
+          readonly NEOFORGE_VERSION='21.1.235'
+          readonly INSTALLER="neoforge-${NEOFORGE_VERSION}-installer.jar"
+          readonly BASE="https://maven.neoforged.net/releases/net/neoforged/neoforge/${NEOFORGE_VERSION}"
+          curl --fail --silent --show-error --location "${BASE}/${INSTALLER}" --output "offline-runtime/${INSTALLER}"
+          curl --fail --silent --show-error --location "${BASE}/${INSTALLER}.sha256" --output "offline-runtime/${INSTALLER}.sha256"
+          expected="$(awk 'NR == 1 {print $1}' "offline-runtime/${INSTALLER}.sha256")"
+          actual="$(sha256sum "offline-runtime/${INSTALLER}" | awk '{print $1}')"
+          test "${actual,,}" = "${expected,,}"
+          mkdir -p offline-runtime/server-template
+          (cd offline-runtime/server-template && java -jar "../${INSTALLER}" --installServer)
+          printf 'eula=true\n' > offline-runtime/server-template/eula.txt
+          printf 'online-mode=false\nserver-port=25568\nview-distance=4\nsimulation-distance=4\nspawn-protection=0\ndifficulty=peaceful\n' > offline-runtime/server-template/server.properties
+          du -sh offline-runtime/server-template offline-runtime/node
+
+      - name: Assemble exact source and offline runtime bundle
+        shell: bash
+        run: |
+          rm -rf local-offline-bundle
+          mkdir -p local-offline-bundle/source local-offline-bundle/gradle-home local-offline-bundle/runtime
+          rsync -a ./ local-offline-bundle/source/ \
+            --exclude '.git/' \
+            --exclude '.gradle/' \
+            --exclude 'build/' \
+            --exclude 'run/' \
+            --exclude 'offline-runtime/' \
+            --exclude 'local-offline-bundle/'
+          rsync -a "${EXPORT_GRADLE_HOME}/" local-offline-bundle/gradle-home/
+          rsync -a offline-runtime/ local-offline-bundle/runtime/
+          cat > local-offline-bundle/run-local-verification.sh <<'SCRIPT'
+          #!/usr/bin/env bash
+          set -euo pipefail
+          ROOT="$(cd "$(dirname "$0")" && pwd)"
+          export GRADLE_USER_HOME="${ROOT}/gradle-home"
+          cd "${ROOT}/source"
+          chmod +x gradlew
+          ./gradlew clean build --offline --no-daemon
+          sha256sum build/libs/antifullbright-1.1.0-beta.1.jar | tee "${ROOT}/local-built-jar.sha256"
+          unzip -t build/libs/antifullbright-1.1.0-beta.1.jar
+          SCRIPT
+          chmod +x local-offline-bundle/run-local-verification.sh
+          printf '%s\n' '${{ github.event.pull_request.head.sha }}' > local-offline-bundle/source-commit.txt
+          tar --zstd -cf antifullbright-local-offline-bundle.tar.zst local-offline-bundle
+          split -b 450M -d -a 3 antifullbright-local-offline-bundle.tar.zst antifullbright-local-offline-bundle.tar.zst.part-
+          sha256sum antifullbright-local-offline-bundle.tar.zst antifullbright-local-offline-bundle.tar.zst.part-* > antifullbright-local-offline-bundle.sha256
+          ls -lh antifullbright-local-offline-bundle.tar.zst*
+
+      - name: Upload offline bundle parts
+        uses: actions/upload-artifact@v4
+        with:
+          name: antifullbright-local-offline-bundle
+          path: |
+            antifullbright-local-offline-bundle.tar.zst.part-*
+            antifullbright-local-offline-bundle.sha256
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 1
