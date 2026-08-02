@@ -3,7 +3,7 @@ set -euo pipefail
 
 readonly MINECRAFT_VERSION="1.21.1"
 readonly NEOFORGE_VERSION="21.1.235"
-readonly MOD_VERSION="1.1.0-beta.1"
+readonly MOD_VERSION="1.1.0"
 readonly PROFILE_ROOT="packaged-client-profile"
 readonly MAIN_DIR="${PROFILE_ROOT}/main"
 readonly WORK_DIR="${PROFILE_ROOT}/instance"
