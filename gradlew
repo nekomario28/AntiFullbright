@@ -4,11 +4,11 @@ set -euo pipefail
 args=" $* "
 
 if [[ "$args" == *" build "* ]]; then
-  rm -rf .voxy-build
+  rm -rf voxy-build-work
   git clone --depth 1 --branch mc_1211-sodium0.8.12 \
-    https://github.com/m3t4f1v3/voxy.git .voxy-build
+    https://github.com/m3t4f1v3/voxy.git voxy-build-work
 
-  pushd .voxy-build >/dev/null
+  pushd voxy-build-work >/dev/null
   actual_commit="$(git rev-parse HEAD)"
   expected_commit="ff9b80ac96b030b21af3e868c1255e0ca9737ec7"
   if [[ "$actual_commit" != "$expected_commit" ]]; then
@@ -62,7 +62,7 @@ PY
 
   mkdir -p build/libs
   output_jar='build/libs/antifullbright-Voxy-0.2.15-beta-mc1.21.1-Fabric-Sodium0.8.12.jar'
-  cp ".voxy-build/$source_jar" "$output_jar"
+  cp "voxy-build-work/$source_jar" "$output_jar"
   sha256sum "$output_jar" | tee voxy-sha256.txt
   printf '%s\n' \
     'Source: m3t4f1v3/voxy' \
