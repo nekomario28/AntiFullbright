@@ -18,8 +18,10 @@ if [[ "$args" == *" build "* ]]; then
 
   python3 - <<'PY'
 from pathlib import Path
-import re
 
+# The branch contains unresolved conflict markers in gradle.properties.
+# Keep its current Loom 1.16 / Gradle 9.4.1 build toolchain and select
+# only the intended Minecraft 1.21.1 side of that conflict.
 Path('gradle.properties').write_text(
     '# Resolved for mc_1211-sodium0.8.12 build\n'
     'org.gradle.jvmargs=-Xmx2G\n'
@@ -28,26 +30,13 @@ Path('gradle.properties').write_text(
     'org.gradle.daemon=false\n\n'
     'minecraft_version=1.21.1\n'
     'loader_version=0.17.2\n'
-    'loom_version=1.11-SNAPSHOT\n'
+    'loom_version=1.16-SNAPSHOT\n'
     'fabric_api_version=0.116.6+1.21.1\n\n'
     'mod_version=0.2.15-beta\n'
     'maven_group=me.cortex\n'
     'archives_base_name=voxy\n',
     encoding='utf-8',
 )
-
-build = Path('build.gradle')
-text = build.read_text(encoding='utf-8')
-text = text.replace(
-    'id \'fabric-loom\' version "1.16-SNAPSHOT"',
-    'id \'fabric-loom\' version "1.11-SNAPSHOT"',
-)
-build.write_text(text, encoding='utf-8')
-
-wrapper = Path('gradle/wrapper/gradle-wrapper.properties')
-text = wrapper.read_text(encoding='utf-8')
-text = re.sub(r'gradle-[^/]+-bin\.zip', 'gradle-8.14.3-bin.zip', text)
-wrapper.write_text(text, encoding='utf-8')
 PY
 
   chmod +x gradlew
@@ -71,6 +60,7 @@ PY
     'Loader: Fabric' \
     'Minecraft: 1.21.1' \
     'Sodium target: 0.8.12 alpha.3 Fabric' \
+    'Build tools: Fabric Loom 1.16-SNAPSHOT, Gradle 9.4.1, Java 21' \
     > voxy-build-info.txt
   exit 0
 fi
